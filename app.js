@@ -19,6 +19,7 @@ const since = t => t ? new Date(t).toLocaleDateString('ar-EG', { month: 'long', 
 const profileHead = (u, owner) => `<div class="pcard"><div class="cover ${u.cover ? '' : 'nocover'}" ${u.cover ? `style="background-image:url(${u.cover})"` : ''}></div><div class="pbody">${av(u, 'big')}<h1>${esc(u.name)}</h1><div class="handle">@${esc(u.username)}</div>
   <div class="stats" style="grid-template-columns:repeat(${owner ? 4 : 3},1fr)"><div><b>${nf(u.stats.received)}</b><span>رسالة</span></div><div><b>${nf(u.stats.replies)}</b><span>رد</span></div>${owner ? `<div><b>${nf(u.views)}</b><span>زيارة</span></div>` : ''}<div><b>${since(u.since)}</b><span>انضم</span></div></div>
   ${owner && u.bio ? `<p class="bio">${esc(u.bio)}</p>` : ''}</div></div>`;
+const bigCopy = (text, label) => `<div class="invlink" dir="ltr">${esc(text)}</div><button class="copybtn" data-act="copy" data-text="${esc(text)}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>${label}</span></button>`;
 const copyBtn = (id, text) => `<button class="btn sm ghost" data-act="copy" data-text="${esc(text)}">نسخ</button>`;
 // one delegated click handler instead of inline onclick attributes (lets the CSP forbid inline scripts)
 document.addEventListener('click', e => {
@@ -96,7 +97,7 @@ async function pageSend(un) {
   const tx0 = $('#tx'); if (tx0) { tx0.oninput = () => $('#cnt').textContent = tx0.value.length + '/500'; document.querySelectorAll('.chip').forEach(b => b.onclick = () => { document.querySelectorAll('.chip').forEach(x => x.classList.remove('on')); b.classList.add('on'); if (!tx0.value.trim() || /^\[.*\] /.test(tx0.value)) tx0.value = `[${b.textContent}] `; tx0.focus(); tx0.oninput(); }); }
   const f = $('#f'); if (f) f.onsubmit = async e => { e.preventDefault(); try { const r = await api(`/u/${un}/send`, 'POST', { text: $('#tx').value }); localStorage.setItem('last-code', r.code);
     app.innerHTML = shell(`<div class="card center"><div class="avatar">✓</div><h1>اتبعتت</h1><p class="sub">احفظ الكود ده أو الرابط، وتقدر تتابع بيه لو ${esc(u.name)} رد عليك.</p><div class="codebig">${r.code}</div>
-    <div class="linkbox"><span>${origin}/#/t/${r.code}</span>${copyBtn('', origin + '/#/t/' + r.code)}</div><p class="row" style="justify-content:center;margin-top:14px"><a class="btn" href="#/t/${r.code}">افتح المحادثة</a></p><div class="notice">الكود هو الوحيد اللي بيوصل لمحادثتك. لو ضاع مفيش طريقة نرجعه، لأننا مش بنعرف مين أنت.</div></div>`);
+    ${bigCopy(origin + '/#/t/' + r.code, 'نسخ اللينك')}<p class="row" style="justify-content:center;margin-top:14px"><a class="btn" href="#/t/${r.code}">افتح المحادثة</a></p><div class="notice">الكود هو الوحيد اللي بيوصل لمحادثتك. لو ضاع مفيش طريقة نرجعه، لأننا مش بنعرف مين أنت.</div></div>`);
   } catch (x) { $('#er').textContent = x.message; } };
 }
 function pageFollow() {
@@ -119,7 +120,7 @@ async function pageTrack(c) {
 }
 async function pageInbox() {
   const u = await api('/me'), { threads } = await api('/inbox'), link = `${origin}/#/u/${u.username}`;
-  app.innerHTML = shell(`${profileHead(u, true)}<div class="card center"><p class="sub">شارك رابطك على ستوري أو بروفايلك واستقبل رسايل مجهولة</p><div class="linkbox"><span>${link}</span>${copyBtn('', link)}</div></div>
+  app.innerHTML = shell(`${profileHead(u, true)}<div class="card center"><p class="sub">شارك رابطك على ستوري أو بروفايلك واستقبل رسايل مجهولة</p>${bigCopy(link, 'نسخ اللينك')}</div>
   ${threads.length ? threads.map(t => `<a class="thread ${t.unread ? 'unread' : ''}" href="#/inbox/${t.id}"><div class="t"><b>${t.starred ? '⭐ ' : ''}مجهول</b><span class="mut">${time(t.last.t)}</span></div><div class="m mut">${t.last.from === 'owner' ? 'أنت: ' : ''}${esc(t.last.text)}</div><div style="margin-top:4px">${t.count > 1 ? `<span class="badge">${t.count} رسايل</span> ` : ''}${t.replied ? '<span class="badge">اترد عليها</span>' : ''}</div></a>`).join('') : '<div class="empty">مفيش رسايل لسه.<br>أول ما حد يبعتلك هتظهر هنا.</div>'}`,
     `<a class="btn sm" href="#/settings/invite">+ ادعُ أصحابك</a> <a class="btn sm ghost" href="#/settings">الإعدادات</a> <button class="btn sm ghost" id="out">خروج</button>`);
   $('#out').onclick = async () => { await api('/logout', 'POST'); location.hash = '#/'; location.reload(); };
