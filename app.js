@@ -9,10 +9,17 @@ document.documentElement.dataset.theme = theme();
 const themeBtn = () => `<button class="theme" data-act="theme" title="الوضع الفاتح/الداكن" aria-label="تغيير الثيم">◐</button>`;
 const shell = (inner, nav = '') => `<div class="wrap"><div class="top"><a class="brand" href="#/">${esc(SITE)}</a><div class="row" style="align-items:center">${nav} ${themeBtn()}</div></div>${inner}</div>`;
 let timer;
-function bubbles(msgs, ownerView, ownerName) {
-  return `<div class="chat">${msgs.map(m => { const o = m.from === 'owner'; const lbl = o ? (ownerView ? 'أنت' : esc(ownerName)) : (ownerView ? 'مجهول' : 'أنت (مجهول)'); const mine = ownerView ? o : !o;
-    return `<div class="who ${mine ? '' : 'r'}">${lbl}</div><div class="b ${mine ? 'mine' : 'theirs'}">${esc(m.text)}<small>${time(m.t)}</small></div>`; }).join('')}</div>`;
+const plane = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>`;
+function bubbles(msgs, ownerView, ownerName, ownerAv) {
+  let prev = null;
+  const rows = msgs.map(m => { const o = m.from === 'owner'; const mine = ownerView ? o : !o; const cont = prev === m.from; prev = m.from;
+    const lbl = o ? (ownerView ? 'أنت' : esc(ownerName)) : (ownerView ? 'مجهول' : 'أنت (مجهول)');
+    const wav = o ? (ownerAv ? `<img class="wav" src="${ownerAv}" alt="">` : `<span class="wav">${esc((ownerName || '?')[0])}</span>`) : `<span class="wav anon">؟</span>`;
+    const chip = cont ? '' : `<div class="who ${mine ? '' : 'r'}"><span class="wchip">${wav}${lbl}</span></div>`;
+    return `${chip}<div class="b ${mine ? 'mine' : 'theirs'}${cont ? ' c' : ''}">${esc(m.text)}<small>${time(m.t)}</small></div>`; }).join('');
+  return `<div class="conv"><div class="hbrand"><span class="hb-mark">${esc(SITE)}</span><i></i><span>محادثة مجهولة</span></div><div class="chat">${rows}</div></div>`;
 }
+const brandline = () => `<div class="brandline">من <b>${esc(SITE)}</b> · رسايل مجهولة، وردود حقيقية</div>`;
 const av = (u, cls = '') => u.avatar ? `<img class="av ${cls}" src="${u.avatar}" alt="">` : `<div class="av ${cls}">${esc((u.name || '?')[0])}</div>`;
 const nf = n => Number(n).toLocaleString('ar-EG');
 const since = t => t ? new Date(t).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' }) : '—';
@@ -108,8 +115,8 @@ async function pageTrack(c) {
   let seen = 0;
   const draw = async (post) => {
     const t = await api('/t/' + c, post ? 'POST' : 'GET', post);
-    app.innerHTML = shell(`<div class="card"><div class="center">${av(t.to)}<h1 style="font-size:20px">${esc(t.to.name)}</h1><p class="mut" style="margin:0">محادثة مجهولة · ${t.code}</p><button class="btn sm ghost" id="shr" style="margin-top:8px">📷 شارك كصورة</button></div>${bubbles(t.msgs, false, t.to.name)}
-    <form class="composer" id="f"><textarea id="tx" maxlength="1000" placeholder="اكتب رسالة جديدة..."></textarea><button class="send" aria-label="إرسال">➤</button></form>
+    app.innerHTML = shell(`<div class="card"><div class="center">${av(t.to)}<h1 style="font-size:20px">${esc(t.to.name)}</h1><p class="mut" style="margin:0">محادثة مجهولة · ${t.code}</p><button class="btn sm ghost" id="shr" style="margin-top:8px">📷 شارك كصورة</button></div>${bubbles(t.msgs, false, t.to.name, t.to.avatar)}
+    <form class="composer" id="f"><textarea id="tx" maxlength="1000" placeholder="اكتب رسالة جديدة..."></textarea><button class="send" aria-label="إرسال">${plane}</button></form>${brandline()}
     ${t.msgs.some(m => m.from === 'owner') ? '' : '<p class="mut center" style="margin-bottom:0">لسه مفيش رد. الصفحة بتتحدث لوحدها.</p>'}</div>`);
     $('#shr').onclick = () => shareDialog(t.msgs, t.to.name, false);
     $('#f').onsubmit = e => { e.preventDefault(); if ($('#tx').value.trim()) draw({ text: $('#tx').value }); };
@@ -130,8 +137,8 @@ async function pageInbox() {
 }
 async function pageThread(id) {
   const t = await api('/inbox/' + id), u0 = await api('/me');
-  app.innerHTML = shell(`<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:6px"><a href="#/inbox" class="mut">→ الرسايل</a><span class="row"><button class="btn sm ghost" id="shr">📷 صورة</button><button class="btn sm ghost" id="st">${t.starred ? '⭐ مفضلة' : '☆ تفضيل'}</button><button class="btn sm ghost" id="rp">إبلاغ</button><button class="btn sm ghost" id="bl">حظر</button><button class="btn sm ghost" id="dl">حذف</button></span></div>${bubbles(t.msgs, true)}
-  <form class="composer" id="f"><textarea id="tx" maxlength="1000" placeholder="اكتب ردك... المرسل هيشوفه بالكود بتاعه"></textarea><button class="send" aria-label="إرسال">➤</button></form></div>`);
+  app.innerHTML = shell(`<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:6px"><a href="#/inbox" class="mut">→ الرسايل</a><span class="row"><button class="btn sm ghost" id="shr">📷 صورة</button><button class="btn sm ghost" id="st">${t.starred ? '⭐ مفضلة' : '☆ تفضيل'}</button><button class="btn sm ghost" id="rp">إبلاغ</button><button class="btn sm ghost" id="bl">حظر</button><button class="btn sm ghost" id="dl">حذف</button></span></div>${bubbles(t.msgs, true, u0.name, u0.avatar)}
+  <form class="composer" id="f"><textarea id="tx" maxlength="1000" placeholder="اكتب ردك... المرسل هيشوفه بالكود بتاعه"></textarea><button class="send" aria-label="إرسال">${plane}</button></form>${brandline()}</div>`);
   $('#f').onsubmit = async e => { e.preventDefault(); if (!$('#tx').value.trim()) return; await api(`/inbox/${id}/reply`, 'POST', { text: $('#tx').value }); pageThread(id); };
   $('#shr').onclick = () => shareDialog(t.msgs, u0.name, true);
   $('#st').onclick = async () => { await api(`/inbox/${id}/star`, 'POST'); pageThread(id); };
@@ -185,19 +192,30 @@ fetch('/api/config').then(r => r.json()).then(c => { SITE = c.name; document.tit
 // ---- share a conversation as an image (drawn in the browser, nothing is uploaded)
 function wrap(g, text, maxW) { const out = []; for (const para of text.split('\n')) { let line = ''; for (const w of para.split(' ')) { const t = line ? line + ' ' + w : w; if (g.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t; } out.push(line); } return out; }
 function chatImage(msgs, ownerName, ownerView) {
-  const W = 1080, P = 70, BW = 760, F = 38, LH = 56, g0 = document.createElement('canvas').getContext('2d'); g0.font = `${F}px "Segoe UI",Tahoma,sans-serif`;
-  const items = msgs.slice(-8).map(m => { const mine = ownerView ? m.from === 'owner' : m.from === 'anon'; const lines = wrap(g0, m.text, BW - 80); return { mine, lines, h: lines.length * LH + 50 }; });
-  const head = 300, foot = 170, H = head + items.reduce((a, i) => a + i.h + 26, 0) + foot;
+  const W = 1080, P = 64, BW = 800, F = 40, LH = 58, g0 = document.createElement('canvas').getContext('2d'); g0.font = `${F}px Tahoma,"Segoe UI",sans-serif`;
+  const items = msgs.slice(-8).map(m => { const mine = ownerView ? m.from === 'owner' : m.from === 'anon'; const lbl = m.from === 'owner' ? (ownerView ? 'أنت' : ownerName) : (ownerView ? 'مجهول' : 'أنت (مجهول)'); const lines = wrap(g0, m.text, BW - 90); return { mine, lbl, lines, h: lines.length * LH + 58 }; });
+  const cardTop = 250, pad = 44, foot = 190, msgH = items.reduce((a, i) => a + i.h + 46, 0), H = cardTop + pad + msgH + pad + foot;
   const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d'); g.direction = 'rtl';
-  const bg = g.createLinearGradient(0, 0, W, H); bg.addColorStop(0, '#c8402b'); bg.addColorStop(1, '#ff9a5c'); g.fillStyle = bg; g.fillRect(0, 0, W, H);
-  g.fillStyle = 'rgba(255,255,255,.96)'; g.beginPath(); g.roundRect(40, 190, W - 80, H - 190 - 120, 44); g.fill();
-  g.textAlign = 'center'; g.fillStyle = '#fff'; g.font = 'bold 86px "Segoe UI",Tahoma,sans-serif'; g.fillText(SITE, W / 2, 120);
-  g.font = '34px "Segoe UI",Tahoma,sans-serif'; g.fillStyle = 'rgba(255,255,255,.9)'; g.fillText('محادثة مجهولة مع ' + ownerName, W / 2, 168);
-  let y = head - 40; g.font = `${F}px "Segoe UI",Tahoma,sans-serif`;
-  for (const it of items) { const w = Math.max(...it.lines.map(l => g.measureText(l).width)) + 80, x = it.mine ? W - P - 20 - w : P + 20;
-    g.fillStyle = it.mine ? '#e0553b' : '#f6ece5'; g.beginPath(); g.roundRect(x, y, w, it.h, 34); g.fill();
-    g.fillStyle = it.mine ? '#fff' : '#241a16'; g.textAlign = 'right'; it.lines.forEach((l, i) => g.fillText(l, x + w - 40, y + 62 + i * LH)); y += it.h + 26; }
-  g.textAlign = 'center'; g.fillStyle = '#fff'; g.font = 'bold 40px "Segoe UI",Tahoma,sans-serif'; g.fillText('ابعت رسالة مجهولة على ' + SITE, W / 2, H - 52);
+  g.fillStyle = '#171210'; g.fillRect(0, 0, W, H);
+  const orb = (x, y, r, c1) => { const rg = g.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, c1); rg.addColorStop(1, 'rgba(224,85,59,0)'); g.fillStyle = rg; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); };
+  orb(90, 40, 430, 'rgba(224,85,59,.5)'); orb(W - 60, H - 100, 480, 'rgba(255,138,76,.32)');
+  g.save(); g.globalAlpha = .05; g.fillStyle = '#ff8a4c'; g.font = 'bold 88px Tahoma,sans-serif'; g.textAlign = 'center';
+  for (let yy = 420; yy < H; yy += 360) for (let xx = 160; xx < W; xx += 460) { g.save(); g.translate(xx, yy); g.rotate(-.3); g.fillText(SITE, 0, 0); g.restore(); }
+  g.restore();
+  const grad = g.createLinearGradient(W / 2 - 170, 0, W / 2 + 170, 0); grad.addColorStop(0, '#e0553b'); grad.addColorStop(1, '#ff8a4c');
+  g.textAlign = 'center'; g.fillStyle = grad; g.font = 'bold 104px Tahoma,"Segoe UI",sans-serif'; g.fillText(SITE, W / 2, 128);
+  g.fillStyle = 'rgba(244,237,231,.85)'; g.font = '37px Tahoma,sans-serif'; g.fillText('محادثة مجهولة مع ' + ownerName, W / 2, 186);
+  g.strokeStyle = 'rgba(255,255,255,.14)'; g.lineWidth = 2; g.beginPath(); g.moveTo(140, 216); g.lineTo(W - 140, 216); g.stroke();
+  g.fillStyle = 'rgba(30,25,23,.94)'; g.beginPath(); g.roundRect(36, cardTop, W - 72, msgH + pad * 2, 42); g.fill();
+  let y = cardTop + pad; g.textAlign = 'right';
+  for (const it of items) { const w = Math.max(...it.lines.map(l => g.measureText(l).width)) + 90, x = it.mine ? W - 36 - pad - w : 36 + pad;
+    g.fillStyle = '#a39990'; g.font = '27px Tahoma,sans-serif'; g.textAlign = it.mine ? 'right' : 'left'; g.fillText(it.lbl, it.mine ? x + w - 10 : x + 10, y + 26); g.textAlign = 'right';
+    const by = y + 40; if (it.mine) { const bg2 = g.createLinearGradient(x, by, x + w, by + it.h); bg2.addColorStop(0, '#e0553b'); bg2.addColorStop(1, '#ff8a4c'); g.fillStyle = bg2; } else g.fillStyle = '#2c2421';
+    g.beginPath(); g.roundRect(x, by, w, it.h, it.mine ? [32, 32, 9, 32] : [32, 32, 32, 9]); g.fill();
+    if (!it.mine) { g.strokeStyle = 'rgba(255,255,255,.09)'; g.lineWidth = 2; g.stroke(); }
+    g.fillStyle = it.mine ? '#fff' : '#f4ede7'; g.font = `${F}px Tahoma,"Segoe UI",sans-serif`; it.lines.forEach((l, i) => g.fillText(l, x + w - 45, by + 66 + i * LH)); y = by + it.h + 6; }
+  g.textAlign = 'center'; g.fillStyle = grad; g.font = 'bold 46px Tahoma,sans-serif'; g.fillText('ابعت رسالة مجهولة على ' + SITE, W / 2, H - 108);
+  g.fillStyle = 'rgba(255,255,255,.55)'; g.font = '30px Tahoma,sans-serif'; g.save(); g.direction = 'ltr'; g.fillText(origin.replace(/^https?:\/\//, ''), W / 2, H - 58); g.restore();
   return c;
 }
 function shareDialog(msgs, ownerName, ownerView) {

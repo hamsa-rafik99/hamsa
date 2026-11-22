@@ -102,3 +102,31 @@ input:focus,textarea:focus{outline:none;border-color:var(--p)}textarea{resize:ve
 .invite .btn.full{margin-top:10px;background:transparent;border:1px solid var(--line);color:var(--ink)}
 
 .invite.flash{animation:fl 1.6s ease 1}@keyframes fl{0%,60%{box-shadow:0 0 0 3px #e0553b}100%{box-shadow:none}}
+
+/* ===== v8: Hamsa conversation identity ===== */
+.conv{position:relative;background:var(--soft2);border:1px solid var(--line);border-radius:24px;padding:14px 10px 10px;overflow:hidden;margin-top:12px}
+.conv::before{content:"";position:absolute;inset:0;background-image:url("data:image/svg+xml,%3Csvg%20xmlns='http://www.w3.org/2000/svg'%20width='160'%20height='160'%3E%3Cg%20transform='rotate(-20%2080%2080)'%3E%3Ctext%20x='80'%20y='90'%20font-size='34'%20font-family='Tahoma'%20fill='%23ff8a4c'%20text-anchor='middle'%3E%D9%87%D9%85%D8%B3%D9%87%3C/text%3E%3C/g%3E%3C/svg%3E");background-size:150px;opacity:.05;pointer-events:none}
+.hbrand{position:relative;display:flex;align-items:center;gap:10px;margin:0 2px 12px}
+.hbrand .hb-mark{font-weight:800;font-size:15px;background:linear-gradient(90deg,var(--p),var(--p2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.hbrand i{flex:1;height:1px;background:linear-gradient(90deg,var(--line),transparent)}
+.hbrand span:last-child{font-size:11.5px;color:var(--mut)}
+.chat{position:relative;gap:3px}
+.b{max-width:80%;padding:11px 16px;border-radius:22px;box-shadow:0 3px 10px var(--shadow);font-size:15.5px;line-height:1.75}
+.b small{font-size:10px;opacity:.6;margin-top:4px}
+.b.mine{background:linear-gradient(135deg,var(--p) 20%,var(--p2));color:#fff;border-end-end-radius:7px}
+.b.theirs{background:var(--other);border:1px solid var(--line);border-end-start-radius:7px}
+.who{display:flex;margin:12px 6px 4px}
+.who.r{justify-content:flex-end}
+.who .wchip{display:inline-flex;align-items:center;gap:7px;background:var(--card);border:1px solid var(--line);border-radius:30px;padding:3px 12px 3px 5px;font-size:12px;font-weight:700;color:var(--sub)}
+.who.r .wchip{flex-direction:row-reverse;padding:3px 5px 3px 12px}
+.wav{width:22px;height:22px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;background:linear-gradient(135deg,var(--p),var(--p2));object-fit:cover;flex:none}
+.wav.anon{background:#3a312c;color:#b9aca2}
+.composer{background:var(--soft2);border:1.5px solid var(--line);border-radius:30px;padding:5px 6px;align-items:center;margin-top:14px}
+.composer:focus-within{border-color:var(--p)}
+.composer textarea{border:0;background:transparent;border-radius:0;min-height:46px;height:46px;padding:11px 12px}
+.composer textarea:focus{outline:none;border:0}
+.send{width:48px;height:48px;display:flex;align-items:center;justify-content:center;box-shadow:0 5px 14px rgba(224,85,59,.35)}
+.send svg{width:21px;height:21px;transform:scaleX(-1)}
+.brandline{text-align:center;font-size:11.5px;color:var(--mut);margin:10px 0 0}
+.brandline b{background:linear-gradient(90deg,var(--p),var(--p2));-webkit-background-clip:text;background-clip:text;color:transparent}
+.phone .b{box-shadow:none}
