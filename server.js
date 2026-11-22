@@ -97,8 +97,8 @@ async function api(req, res, url) {
     return login(res, un);
   }
   if (p === '/api/login' && m === 'POST') {
-    const un = clean(b.username, 20).toLowerCase(), x = db.users[un];
-    if (limited('li' + ip(req) + un, 8, 600e3) || limited('lu' + un, 30, 3600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
+    const idf = clean(b.username, 100).toLowerCase().replace(/^@/, ''), x = idf.includes('@') ? Object.values(db.users).find(q => q.email && q.email === idf) : db.users[idf], un = x ? x.username : idf.slice(0, 20);
+    if (limited('li' + ip(req) + idf, 8, 600e3) || limited('lu' + idf, 30, 3600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
     const y = x || DUMMY;
     if (!same(hash(b.password || '', y.salt), y.pw) || !x) { admin.bump('failedLogins'); return send(res, 401, { error: 'اسم المستخدم أو كلمة السر غلط' }); }
     if (x.banned) return send(res, 403, { error: 'الحساب ده موقوف' });

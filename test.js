@@ -32,6 +32,7 @@ const call = async (p, m = 'GET', d, c = '') => { const r = await fetch(B + p, {
   assert.equal((await call('/me', 'GET', 0, mck)).st, 401);
   assert.equal((await call('/login', 'POST', { username: 'mona', password: 'newpass1' })).st, 200);
   const l2 = await call('/login', 'POST', { username: 'mona', password: 'newpass1' });
+  { const e1 = await call('/login', 'POST', { username: 'Mona@Example.com', password: 'newpass1' }); assert.equal(e1.st, 200); const e2 = await call('/login', 'POST', { username: 'mona@example.com', password: 'nope' }), e3 = await call('/login', 'POST', { username: 'nobody@example.com', password: 'nope' }), e4 = await call('/login', 'POST', { username: 'mona', password: 'nope' }); assert.equal(e2.st, 401); assert.equal(e3.st, 401); assert.deepEqual(e2.j, e3.j); assert.deepEqual(e2.j, e4.j); }
   assert.equal((await call('/password', 'POST', { old: 'x', password: 'zzzzzz' }, l2.ck)).st, 400);
   assert.equal((await call('/password', 'POST', { old: 'newpass1', password: 'zzzzzz' }, l2.ck)).st, 200);
   r = await call('/notify', 'POST', { email: 'mona@example.com', nEmail: true, telegram: '12345', whatsapp: '+20 100 123', onMessage: true }, l2.ck); assert.equal(r.j.telegram, '12345'); assert.equal(r.j.whatsapp, '20100123');
