@@ -24,9 +24,16 @@ const copyBtn = (id, text) => `<button class="btn sm ghost" data-act="copy" data
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
   if (b.dataset.act === 'theme') { localStorage.setItem('theme', theme() === 'dark' ? 'light' : 'dark'); document.documentElement.dataset.theme = theme(); }
-  if (b.dataset.act === 'copy') { const done = () => { b.textContent = 'تم النسخ ✓'; }; (navigator.clipboard ? navigator.clipboard.writeText(b.dataset.text).then(done, done) : done()); }
+  if (b.dataset.act === 'share') navigator.share({ title: SITE, text: 'سجّل على ' + SITE + ' واستقبل رسايل مجهولة', url: b.dataset.text }).catch(() => {});
+  if (b.dataset.act === 'copy') { const done = () => { const l = b.querySelector('span'); (l || b).textContent = 'تم النسخ ✓'; b.classList.add('done'); }; (navigator.clipboard ? navigator.clipboard.writeText(b.dataset.text).then(done, done) : done()); }
 });
 
+// the admin UI is a separate file, fetched only when someone opens #/admin
+let adminLoaded;
+async function loadAdmin(tab) {
+  if (!adminLoaded) adminLoaded = new Promise((ok, no) => { const sc = document.createElement('script'); sc.src = '/admin-ui.js'; sc.onload = ok; sc.onerror = no; document.head.appendChild(sc); });
+  await adminLoaded; return pageAdmin(tab || 'overview');
+}
 async function route() {
   clearInterval(timer);
   const h = location.hash.slice(1) || '/'; let m;
@@ -41,6 +48,8 @@ async function route() {
     if (h === '/forgot') return pageForgot();
     if ((m = h.match(/^\/reset\/([A-Za-z0-9_-]+)$/))) return pageReset(m[1]);
     if (h === '/outbox') return pageOutbox();
+    if ((m = h.match(/^\/join\/([A-Za-z0-9_-]{4,16})$/))) { sessionStorage.setItem('ref', m[1]); return pageJoin(m[1]); }
+    if ((m = h.match(/^\/admin(?:\/([a-z]+))?$/))) return loadAdmin(m[1]);
     return pageHome();
   } catch (e) { if (e.status === 401) location.hash = '#/'; else app.innerHTML = shell(`<div class="card center"><h1>مش لاقيين الصفحة</h1><p class="sub">${esc(e.message)}</p><a class="btn" href="#/">الرئيسية</a></div>`); }
 }
@@ -61,6 +70,11 @@ async function pageHome() {
   <footer class="lfoot">${S} · رسايل مجهولة بكل احترام</footer></div>`;
   $('#ff').onsubmit = e => { e.preventDefault(); if ($('#fc').value.trim()) location.hash = '#/t/' + $('#fc').value.trim().toUpperCase(); };
 }
+async function pageJoin(code) {
+  let inviter = null; try { inviter = await api('/invite/' + code); } catch { sessionStorage.removeItem('ref'); }
+  await pageAuth(true);
+  if (inviter && $('.card')) $('.card').insertAdjacentHTML('afterbegin', `<div class="note">${esc(inviter.name)} دعاك تنضم لـ ${esc(SITE)}</div>`);
+}
 async function pageAuth(signupFirst) {
   let user = null; try { user = await api('/me'); } catch {}
   if (user) { location.hash = '#/inbox'; return; }
@@ -70,7 +84,7 @@ async function pageAuth(signupFirst) {
   <div class="card center"><p class="sub" style="margin:0">معاك كود رسالة بعتها قبل كده؟</p><a class="btn ghost sm" href="#/follow" style="margin-top:8px">تابع الردود</a></div><p class="center" style="margin:8px 0 0"><a class="mut" href="#/">→ الصفحة الرئيسية</a></p>`);
   let signup = false; const set = s => { signup = s; $('#nm').style.display = $('#em').style.display = s ? '' : 'none'; $('#fg').style.display = s ? 'none' : ''; $('#go').textContent = s ? 'إنشاء حساب' : 'دخول'; $('#tl').classList.toggle('ghost', s); $('#ts').classList.toggle('ghost', !s); };
   $('#tl').onclick = () => set(false); $('#ts').onclick = () => set(true); if (signupFirst) set(true);
-  $('#f').onsubmit = async e => { e.preventDefault(); try { await api(signup ? '/signup' : '/login', 'POST', { username: $('#un').value, name: $('#nm').value, email: $('#em').value, password: $('#pw').value }); location.hash = '#/inbox'; } catch (x) { $('#er').textContent = x.message; } };
+  $('#f').onsubmit = async e => { e.preventDefault(); try { await api(signup ? '/signup' : '/login', 'POST', { username: $('#un').value, name: $('#nm').value, email: $('#em').value, password: $('#pw').value, ref: sessionStorage.getItem('ref') || '' }); location.hash = '#/inbox'; } catch (x) { $('#er').textContent = x.message; } };
 }
 async function pageSend(un) {
   const u = await api('/u/' + un);
@@ -114,12 +128,13 @@ async function pageInbox() {
 }
 async function pageThread(id) {
   const t = await api('/inbox/' + id), u0 = await api('/me');
-  app.innerHTML = shell(`<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:6px"><a href="#/inbox" class="mut">→ الرسايل</a><span class="row"><button class="btn sm ghost" id="shr">📷 صورة</button><button class="btn sm ghost" id="st">${t.starred ? '⭐ مفضلة' : '☆ تفضيل'}</button><button class="btn sm ghost" id="bl">حظر</button><button class="btn sm ghost" id="dl">حذف</button></span></div>${bubbles(t.msgs, true)}
+  app.innerHTML = shell(`<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:6px"><a href="#/inbox" class="mut">→ الرسايل</a><span class="row"><button class="btn sm ghost" id="shr">📷 صورة</button><button class="btn sm ghost" id="st">${t.starred ? '⭐ مفضلة' : '☆ تفضيل'}</button><button class="btn sm ghost" id="rp">إبلاغ</button><button class="btn sm ghost" id="bl">حظر</button><button class="btn sm ghost" id="dl">حذف</button></span></div>${bubbles(t.msgs, true)}
   <form class="composer" id="f"><textarea id="tx" maxlength="1000" placeholder="اكتب ردك... المرسل هيشوفه بالكود بتاعه"></textarea><button class="send" aria-label="إرسال">➤</button></form></div>`);
   $('#f').onsubmit = async e => { e.preventDefault(); if (!$('#tx').value.trim()) return; await api(`/inbox/${id}/reply`, 'POST', { text: $('#tx').value }); pageThread(id); };
   $('#shr').onclick = () => shareDialog(t.msgs, u0.name, true);
   $('#st').onclick = async () => { await api(`/inbox/${id}/star`, 'POST'); pageThread(id); };
   $('#dl').onclick = async () => { if (confirm('تحذف المحادثة؟')) { await api('/inbox/' + id, 'DELETE'); location.hash = '#/inbox'; } };
+  $('#rp').onclick = async () => { const reason = prompt('سبب البلاغ (اختياري). الإدارة هتشوف المحادثة دي بس.'); if (reason === null) return; await api(`/inbox/${id}/report`, 'POST', { reason }); alert('تم الإبلاغ'); };
   $('#bl').onclick = async () => { if (confirm('تحظر المرسل ده؟ مش هيعرف إنه اتحظر.')) { await api(`/inbox/${id}/block`, 'POST'); location.hash = '#/inbox'; } };
   window.scrollTo(0, document.body.scrollHeight);
 }
@@ -144,6 +159,8 @@ async function pageSettings() {
   $('#rm').onclick = () => { pend.avatar = ''; pend.cover = ''; $('#cv').style.backgroundImage = ''; };
   $('#f').onsubmit = async e => { e.preventDefault(); await api('/profile', 'POST', { name: $('#nm').value, bio: $('#bio').value, open: $('#op').checked, ...pend }); location.hash = '#/inbox'; };
   const saveN = () => api('/notify', 'POST', { email: $('#ne').value, nEmail: $('#nen').checked, telegram: $('#nt').value, whatsapp: $('#nw').value, onMessage: $('#o1').checked, onFollowup: $('#o2').checked });
+  try { const iv = await api('/invite'), link = `${origin}/#/join/${iv.code}`;
+    app.querySelector('.wrap .card').insertAdjacentHTML('afterend', `<div class="card center invite"><h1 style="font-size:20px">ادعُ أصحابك</h1><p class="sub">شارك لينكك الخاص. كل واحد يسجل منه بيتسجل إنه جه من عندك (${iv.count} لحد دلوقتي).</p><div class="invlink" dir="ltr">${esc(link)}</div><button class="copybtn" data-act="copy" data-text="${esc(link)}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>نسخ اللينك</span></button>${navigator.share ? `<button class="btn full" data-act="share" data-text="${esc(link)}" style="margin-top:10px">مشاركة اللينك</button>` : ''}</div>`); } catch {}
   $('#nf').onsubmit = async e => { e.preventDefault(); try { await saveN(); $('#nok').textContent = 'اتحفظت ✓'; $('#ner').textContent = ''; } catch (x) { $('#ner').textContent = x.message; } };
   $('#tst').onclick = async () => { try { await saveN(); const r = await api('/notify/test', 'POST'); $('#nok').textContent = r.sent ? `اتجهز ${r.sent} إشعار تجريبي ✓` : 'مفيش قناة مفعّلة'; } catch (x) { $('#ner').textContent = x.message; } };
   $('#pf').onsubmit = async e => { e.preventDefault(); try { await api('/password', 'POST', { old: $('#po').value, password: $('#pn').value }); $('#per').style.color = '#1a8f4c'; $('#per').textContent = 'اتغيرت ✓'; $('#po').value = $('#pn').value = ''; } catch (x) { $('#per').style.color = ''; $('#per').textContent = x.message; } };

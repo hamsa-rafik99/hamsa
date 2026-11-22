@@ -1,0 +1,45 @@
+// Admin API checks. Run: node test-admin.js
+const { spawn } = require('child_process'), fs = require('fs'), assert = require('assert');
+const DB = '/tmp/admin-test-db.json'; try { fs.unlinkSync(DB); } catch {}
+const PW = 'correct-horse-battery-staple';
+const srv = spawn('node', ['server.js'], { env: { ...process.env, PORT: 3144, DB_FILE: DB, ADMIN_PASSWORD: PW } });
+const B = 'http://localhost:3144/api';
+const call = async (p, m = 'GET', d, ck = '', extra = {}) => { const r = await fetch(B + p, { method: m, headers: { 'Content-Type': 'application/json', cookie: ck, ...extra }, body: d ? JSON.stringify(d) : undefined }); const sc = (r.headers.get('set-cookie') || '').split(';')[0]; let j = {}; try { j = await r.json(); } catch {} return { s: r.status, j, sc }; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+(async () => {
+  await sleep(800);
+  const u = await call('/signup', 'POST', { username: 'alice', password: 'secret1', name: 'Alice', email: 'alice@example.com' }); const uck = u.sc;
+  assert.equal((await call('/admin/overview', 'GET', null, uck)).s, 404, 'normal user must get 404 on admin');
+  assert.equal((await call('/admin/overview')).s, 404);
+  assert.equal((await call('/admin/login', 'POST', { password: 'wrong' })).s, 401);
+  const a = await call('/admin/login', 'POST', { password: PW }); assert.equal(a.s, 200); const ack = a.sc;
+  assert.equal((await call('/admin/overview', 'GET', null, ack)).j.users, 1);
+  assert.equal((await call('/admin/settings', 'POST', { siteName: 'X' }, ack)).s, 403, 'POST needs X-Admin header');
+  const H = { 'X-Admin': '1' };
+  const c1 = (await call('/u/alice/send', 'POST', { text: 'hello there' })).j.code;
+  const c2 = (await call('/u/alice/send', 'POST', { text: 'normal' })).j.code;
+  assert.equal((await call('/admin/reports', 'GET', null, ack)).j.reports.length, 0, 'no message text without report/flag');
+  assert.equal((await call('/inbox/' + c1 + '/report', 'POST', { reason: 'rude' }, uck)).s, 200);
+  const rp = (await call('/admin/reports', 'GET', null, ack)).j.reports; assert.equal(rp.length, 1); assert.equal(rp[0].msgs[0].text, 'hello there');
+  const us = (await call('/admin/users?q=ali', 'GET', null, ack)).j.users; assert.equal(us[0].email, 'al***@example.com'); assert(!('pw' in us[0]));
+  await call('/admin/settings', 'POST', { siteName: 'Test', registrationOpen: false, sendingOpen: true, perRecipientPerHour: 50, bannedWords: 'badword' }, ack, H);
+  assert.equal((await call('/config')).j.name, 'Test');
+  assert.equal((await call('/signup', 'POST', { username: 'bob', password: 'secret1' })).s, 403, 'registration closed');
+  await call('/u/alice/send', 'POST', { text: 'you are a BadWord' });
+  assert.equal((await call('/admin/overview', 'GET', null, ack)).j.flagged, 1);
+  await call('/admin/users/alice/ban', 'POST', {}, ack, H);
+  assert.equal((await call('/me', 'GET', null, uck)).s, 401, 'banned user loses session');
+  assert.equal((await call('/login', 'POST', { username: 'alice', password: 'secret1' })).s, 403);
+  await call('/admin/users/alice/unban', 'POST', {}, ack, H);
+  assert.equal((await call('/login', 'POST', { username: 'alice', password: 'secret1' })).s, 200);
+  await call('/admin/reports/' + c1 + '/delete', 'POST', {}, ack, H);
+  assert((await call('/admin/log', 'GET', null, ack)).j.log.length >= 5);
+  const iv = (await call('/invite', 'GET', null, (await call('/login', 'POST', { username: 'alice', password: 'secret1' })).sc)).j; assert(iv.code && iv.count === 0);
+  assert.equal((await call('/invite/' + iv.code)).s, 200); assert.equal((await call('/invite/nope1234')).s, 404);
+  await call('/admin/settings', 'POST', { registrationOpen: true, sendingOpen: true, perRecipientPerHour: 50, bannedWords: '' }, ack, H);
+  await call('/signup', 'POST', { username: 'carol', password: 'secret1', ref: iv.code });
+  assert.equal((await call('/admin/users?q=carol', 'GET', null, ack)).j.users[0].invitedBy, 'alice', 'invite recorded');
+  await call('/admin/users/alice/delete', 'POST', {}, ack, H);
+  assert.equal((await call('/admin/overview', 'GET', null, ack)).j.users, 1);
+  console.log('admin tests passed'); srv.kill(); process.exit(0);
+})().catch(e => { console.error('FAIL', e.message); srv.kill(); process.exit(1); });

@@ -11,9 +11,13 @@ const BASE = process.env.BASE_URL || 'http://localhost:' + PORT;
 const HTTPS = BASE.startsWith('https://');
 const DEV_OUTBOX = process.env.DEV_OUTBOX ? process.env.DEV_OUTBOX !== '0' : !HTTPS; // local testing mailbox; off in production
 let saveTimer;
-const flush = () => { try { fs.writeFileSync(DB_FILE + '.tmp', JSON.stringify(db)); fs.renameSync(DB_FILE + '.tmp', DB_FILE); } catch (e) { console.error('save failed', e.message); } }; // atomic write
+const SB_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, ''), SB_KEY = process.env.SUPABASE_SERVICE_KEY || '';
+const remote = async (method, q, payload) => { const r = await fetch(SB_URL + '/rest/v1/kv' + q, { method, headers: { apikey: SB_KEY, ...(SB_KEY.startsWith('sb_') ? {} : { Authorization: 'Bearer ' + SB_KEY }), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' }, body: payload ? JSON.stringify(payload) : undefined }); if (!r.ok) throw new Error('remote ' + r.status); return method === 'GET' ? r.json() : null; };
+let remoteBusy = false, remoteDirty = false;
+const flushRemote = async () => { if (!SB_URL) return; if (remoteBusy) { remoteDirty = true; return; } remoteBusy = true; try { await remote('POST', '', { id: 'db', data: db }); } catch (e) { console.error('remote save failed', e.message); } remoteBusy = false; if (remoteDirty) { remoteDirty = false; flushRemote(); } };
+const flush = () => { metrics.lastSave = Date.now(); flushRemote(); try { fs.writeFileSync(DB_FILE + '.tmp', JSON.stringify(db)); fs.renameSync(DB_FILE + '.tmp', DB_FILE); } catch (e) { console.error('save failed', e.message); } }; // atomic write
 const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(flush, 50); };
-process.on('SIGTERM', () => { flush(); process.exit(0); });
+process.on('SIGTERM', async () => { flush(); await new Promise(r => setTimeout(r, 1500)); process.exit(0); });
 process.on('uncaughtException', e => console.error('uncaught', e.message));
 process.on('unhandledRejection', e => console.error('unhandled', e && e.message));
 const rid = n => crypto.randomBytes(n).toString('base64url');
@@ -29,15 +33,17 @@ const limited = (k, max, ms) => { const n = Date.now(); hits[k] = (hits[k] || []
 const SEC = { 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cross-Origin-Opener-Policy': 'same-origin', 'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
   'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   ...(HTTPS ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' } : {}) };
-const send = (res, st, obj, hdr = {}) => { res.writeHead(st, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC, ...hdr }); res.end(JSON.stringify(obj)); };
+const metrics = { started: Date.now(), requests: 0, errors: 0, lastSave: 0 };
+const send = (res, st, obj, hdr = {}) => { if (st === 429 && admin) admin.bump('limited'); res.writeHead(st, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC, ...hdr }); res.end(JSON.stringify(obj)); };
 const body = req => new Promise((ok, no) => { let d = '', n = 0; req.on('data', c => { n += c.length; if (n > 600000) { no(Object.assign(new Error('big'), { status: 413 })); req.destroy(); } else d += c; }); req.on('end', () => { try { const j = JSON.parse(d || '{}'); ok(j && typeof j === 'object' && !Array.isArray(j) ? j : {}); } catch { ok({}); } }); req.on('error', () => ok({})); });
 const cookie = req => { const o = {}; for (const c of (req.headers.cookie || '').split(/;\s*/)) { const i = c.indexOf('='); if (i > 0) { try { o[c.slice(0, i)] = decodeURIComponent(c.slice(i + 1)); } catch {} } } return o; };
-const me = req => { const sid = cookie(req).sid, s = sid && db.sessions[sha(sid)]; if (!s) return null; if (Date.now() - s.t > SESSION_MS) { delete db.sessions[sha(sid)]; return null; } return db.users[s.u] || null; };
+const me = req => { const sid = cookie(req).sid, s = sid && db.sessions[sha(sid)]; if (!s) return null; if (Date.now() - s.t > SESSION_MS) { delete db.sessions[sha(sid)]; return null; } const u = db.users[s.u]; return u && !u.banned ? u : null; };
 const clean = (t, max) => String(t || '').replace(/\s+\n/g, '\n').trim().slice(0, max);
 const img = v => typeof v === 'string' && v.length < 260000 && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(v);
 const stats = un => { let got = 0, rep = 0, th = 0; for (const t of Object.values(db.threads)) if (t.to === un) { th++; got += t.msgs.filter(m => m.from === 'anon').length; rep += t.msgs.filter(m => m.from === 'owner').length; } return { received: got, replies: rep, threads: th }; };
 const pub = u => ({ username: u.username, name: u.name, bio: u.bio, avatar: u.avatar || '', cover: u.cover || '', since: u.created || 0, views: u.views || 0, stats: stats(u.username) });
 // Real client address behind Render/Cloudflare. Used ONLY for rate limits and the hidden block fingerprint, never stored in the clear.
+let admin; // created in boot() after the database is loaded
 const ip = req => String(req.headers['cf-connecting-ip'] || (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress);
 const fpOf = req => crypto.createHmac('sha256', db.secret).update(ip(req)).digest('hex').slice(0, 16);
 
@@ -72,9 +78,12 @@ const emailOk = e => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
 
 async function api(req, res, url) {
   const m = req.method, p = url.pathname, u = me(req);
+  let r;
   const b = m === 'POST' ? await body(req) : {};
-  if (p === '/api/config') return send(res, 200, { name: SITE_NAME });
+  if (p === '/api/config') return send(res, 200, { name: db.settings.siteName || SITE_NAME });
+  if (p.startsWith('/api/admin/')) return admin.handle(req, res, p, m, b);
   if (p === '/api/signup' && m === 'POST') {
+    if (!db.settings.registrationOpen) return send(res, 403, { error: 'التسجيل مقفول مؤقتاً' });
     const un = clean(b.username, 20).toLowerCase();
     if (!/^[a-z0-9_]{3,20}$/.test(un)) return send(res, 400, { error: 'اسم المستخدم لازم يكون ٣ إلى ٢٠ حرف إنجليزي أو أرقام أو _' });
     if (String(b.password || '').length < 6 || String(b.password).length > 200) return send(res, 400, { error: 'كلمة السر لازم تكون من ٦ لـ ٢٠٠ حرف' });
@@ -83,15 +92,27 @@ async function api(req, res, url) {
     const salt = rid(16);
     const em = clean(b.email, 100).toLowerCase(); if (em && !emailOk(em)) return send(res, 400, { error: 'الإيميل مش مظبوط' });
     if (em && Object.values(db.users).some(x => x.email === em)) return send(res, 409, { error: 'الإيميل ده مستخدم قبل كده' });
-    db.users[un] = { username: un, name: clean(b.name, 40) || un, bio: '', salt, pw: hash(b.password, salt), blocked: [], open: true, created: Date.now(), email: em, notify: { email: !!em, onMessage: true, onFollowup: true } };
+    db.users[un] = { username: un, name: clean(b.name, 40) || un, bio: '', salt, pw: hash(b.password, salt), blocked: [], open: true, created: Date.now(), invitedBy: ((b.ref && Object.values(db.users).find(q => q.invite === String(b.ref).slice(0, 16) && !q.banned)) || {}).username || '', email: em, notify: { email: !!em, onMessage: true, onFollowup: true } };
+    admin.bump('signups'); admin.feed('signup', '@' + un); if (db.users[un].invitedBy) { admin.bump('invitedSignups'); admin.feed('invited signup', '@' + un + ' ← @' + db.users[un].invitedBy); }
     return login(res, un);
   }
   if (p === '/api/login' && m === 'POST') {
     const un = clean(b.username, 20).toLowerCase(), x = db.users[un];
     if (limited('li' + ip(req) + un, 8, 600e3) || limited('lu' + un, 30, 3600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
     const y = x || DUMMY;
-    if (!same(hash(b.password || '', y.salt), y.pw) || !x) return send(res, 401, { error: 'اسم المستخدم أو كلمة السر غلط' });
+    if (!same(hash(b.password || '', y.salt), y.pw) || !x) { admin.bump('failedLogins'); return send(res, 401, { error: 'اسم المستخدم أو كلمة السر غلط' }); }
+    if (x.banned) return send(res, 403, { error: 'الحساب ده موقوف' });
     return login(res, un);
+  }
+  if (p === '/api/invite' && m === 'GET') {
+    if (!u) return send(res, 401, { error: 'auth' });
+    if (!u.invite) { do { u.invite = rid(6); } while (Object.values(db.users).some(q => q !== u && q.invite === u.invite)); save(); }
+    return send(res, 200, { code: u.invite, count: Object.values(db.users).filter(q => q.invitedBy === u.username).length });
+  }
+  if ((r = p.match(/^\/api\/invite\/([A-Za-z0-9_-]{4,16})$/)) && m === 'GET') {
+    if (limited('iv' + ip(req), 30, 600e3)) return send(res, 429, { error: 'محاولات كتير' });
+    const x = Object.values(db.users).find(q => q.invite === r[1] && !q.banned); if (x) { x.inviteVisits = (x.inviteVisits || 0) + 1; admin.bump('inviteVisits'); save(); }
+    return x ? send(res, 200, { name: x.name }) : send(res, 404, { error: 'لينك الدعوة مش صحيح' });
   }
   if (p === '/api/logout' && m === 'POST') { delete db.sessions[sha(cookie(req).sid || '')]; save(); return send(res, 200, { ok: 1 }, { 'Set-Cookie': `sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${HTTPS ? '; Secure' : ''}` }); }
   if (p === '/api/me') return u ? send(res, 200, { ...pub(u), open: u.open, email: u.email || '' }) : send(res, 401, { error: 'auth' });
@@ -141,18 +162,19 @@ async function api(req, res, url) {
     save();
     return send(res, 200, pub(u));
   }
-  let r;
-  if ((r = p.match(/^\/api\/u\/([a-z0-9_]+)$/))) { const x = db.users[r[1]]; if (x && !me(req)) { x.views = (x.views || 0) + 1; save(); } return x ? send(res, 200, { ...pub(x), open: x.open }) : send(res, 404, { error: 'مفيش حد بالاسم ده' }); }
+  if ((r = p.match(/^\/api\/u\/([a-z0-9_]+)$/))) { const x = db.users[r[1]]; if (x && !me(req)) { x.views = (x.views || 0) + 1; admin.bump('views'); save(); } return x ? send(res, 200, { ...pub(x), open: x.open }) : send(res, 404, { error: 'مفيش حد بالاسم ده' }); }
   if ((r = p.match(/^\/api\/u\/([a-z0-9_]+)\/send$/)) && m === 'POST') {
     const x = db.users[r[1]]; if (!x) return send(res, 404, { error: 'مفيش حد بالاسم ده' });
-    if (!x.open) return send(res, 403, { error: 'صاحب الصفحة قافل استقبال الرسايل دلوقتي' });
+    if (!x.open || x.banned || !db.settings.sendingOpen) return send(res, 403, { error: 'صاحب الصفحة قافل استقبال الرسايل دلوقتي' });
     const text = clean(b.text, 1000); if (!text) return send(res, 400, { error: 'اكتب رسالة الأول' });
     if (limited('sd' + ip(req), 15, 600e3)) return send(res, 429, { error: 'بتبعت بسرعة، استنى شوية' });
     const fp = fpOf(req);
-    if (limited('rc' + x.username, 60, 3600e3)) return send(res, 429, { error: 'الصفحة دي جاتلها رسايل كتير، جرب بعد شوية' });
-    if ((x.blocked || []).includes(fp)) return send(res, 200, { code: code() }); // blocked senders look like success
+    if (limited('rc' + x.username, db.settings.perRecipientPerHour, 3600e3)) return send(res, 429, { error: 'الصفحة دي جاتلها رسايل كتير، جرب بعد شوية' });
+    if ((x.blocked || []).includes(fp) || db.bannedFp.includes(fp)) return send(res, 200, { code: code() }); // blocked senders look like success
     const c = code();
     db.threads[c] = { code: c, to: x.username, fp, created: Date.now(), starred: false, unread: true, msgs: [{ from: 'anon', text, t: Date.now() }] };
+    if (admin.flagged(text)) db.threads[c].flagged = true;
+    admin.bump('messages'); admin.feed('message', '@' + x.username);
     save(); notify(x, 'new', 'وصلتك رسالة جديدة على همسه.'); return send(res, 200, { code: c });
   }
   if ((r = p.match(/^\/api\/t\/([A-Z0-9-]+)$/))) {
@@ -163,6 +185,7 @@ async function api(req, res, url) {
       const text = clean(b.text, 1000); if (!text) return send(res, 400, { error: 'اكتب رسالة الأول' });
       if (limited('tp' + ip(req), 30, 600e3)) return send(res, 429, { error: 'بتبعت بسرعة، استنى شوية' });
       if (t.msgs.length >= 300) return send(res, 400, { error: 'المحادثة وصلت للحد الأقصى' });
+      if (admin.flagged(text)) t.flagged = true;
       t.msgs.push({ from: 'anon', text, t: Date.now() }); t.unread = true; save(); notify(x, 'follow', 'وصلك رد جديد من مرسل مجهول.');
     }
     t.senderSeen = Date.now(); if (m !== 'POST') save();
@@ -174,13 +197,14 @@ async function api(req, res, url) {
       .map(t => ({ id: t.code, last: t.msgs.at(-1), count: t.msgs.length, unread: t.unread, starred: t.starred, replied: t.msgs.some(q => q.from === 'owner') }));
     return send(res, 200, { threads: list });
   }
-  if ((r = p.match(/^\/api\/inbox\/([A-Z0-9-]+)(\/(reply|star|block))?$/))) {
+  if ((r = p.match(/^\/api\/inbox\/([A-Z0-9-]+)(\/(reply|star|block|report))?$/))) {
     if (!u) return send(res, 401, { error: 'auth' });
     const t = db.threads[r[1]]; if (!t || t.to !== u.username) return send(res, 404, { error: 'مش موجود' });
     if (m === 'DELETE') { delete db.threads[t.code]; save(); return send(res, 200, { ok: 1 }); }
     if (r[3] === 'reply' && m === 'POST') {
       const text = clean(b.text, 1000); if (!text) return send(res, 400, { error: 'اكتب الرد الأول' });
-      t.msgs.push({ from: 'owner', text, t: Date.now() });
+      t.msgs.push({ from: 'owner', text, t: Date.now() }); admin.bump('replies'); admin.feed('reply', '@' + t.to);
+    } else if (r[3] === 'report' && m === 'POST') { t.report = { t: Date.now(), reason: clean(b.reason, 200) }; admin.bump('reports'); admin.feed('report', '@' + t.to); admin.log('thread_reported', t.code);
     } else if (r[3] === 'star' && m === 'POST') t.starred = !t.starred;
     else if (r[3] === 'block' && m === 'POST') { (u.blocked = u.blocked || []).push(t.fp); delete db.threads[t.code]; save(); return send(res, 200, { ok: 1 }); }
     else if (m === 'GET') t.unread = false;
@@ -188,10 +212,11 @@ async function api(req, res, url) {
   }
   send(res, 404, { error: 'not found' });
 }
-function login(res, un) { const sid = rid(32); db.sessions[sha(sid)] = { u: un, t: Date.now() }; save(); send(res, 200, { username: un }, { 'Set-Cookie': `sid=${sid}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${HTTPS ? '; Secure' : ''}` }); }
+function login(res, un) { admin.bump('logins'); if (db.users[un]) db.users[un].last = Date.now(); const sid = rid(32); db.sessions[sha(sid)] = { u: un, t: Date.now() }; save(); send(res, 200, { username: un }, { 'Set-Cookie': `sid=${sid}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${HTTPS ? '; Secure' : ''}` }); }
 
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml' };
 const server = http.createServer(async (req, res) => {
+  metrics.requests++;
   try {
     const url = new URL(req.url, 'http://x');
     if (url.pathname.startsWith('/api/')) {
@@ -204,12 +229,17 @@ const server = http.createServer(async (req, res) => {
       return await api(req, res, url);
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, SEC); return res.end(); }
-    const f = url.pathname === '/app.js' || url.pathname === '/style.css' ? url.pathname : '/index.html'; // fixed whitelist: no path traversal possible
+    const f = ['/app.js', '/style.css', '/admin-ui.js'].includes(url.pathname) ? url.pathname : '/index.html'; // fixed whitelist: no path traversal possible
     const data = fs.readFileSync(path.join(PUB, f));
     res.writeHead(200, { 'Content-Type': types[path.extname(f)], 'Cache-Control': 'no-cache', ...SEC }); res.end(req.method === 'HEAD' ? undefined : data);
   } catch (e) {
+    metrics.errors++;
     if (!res.headersSent) { const st = e && e.status === 413 ? 413 : 500; res.writeHead(st, { 'Content-Type': 'application/json', ...SEC }); res.end(JSON.stringify({ error: st === 413 ? 'too large' : 'server error' })); }
   }
 });
 server.requestTimeout = 20000; server.headersTimeout = 10000; server.keepAliveTimeout = 5000;
-server.listen(PORT, () => console.log('http://localhost:' + PORT));
+(async function boot() {
+  if (SB_URL) { try { const rows = await remote('GET', '?id=eq.db&select=data'); if (rows[0]) Object.assign(db, rows[0].data); console.log('database loaded from Supabase'); } catch (e) { console.error('remote load failed, refusing to start to avoid overwriting data:', e.message); process.exit(1); } }
+  admin = require('./admin')({ db, send, limited, ip, fpOf, sha, same, hash, save, cookie, HTTPS, metrics, dbFile: DB_FILE, remote: !!SB_URL });
+  server.listen(PORT, () => console.log('http://localhost:' + PORT + (admin.enabled ? ' (admin on)' : '')));
+})();

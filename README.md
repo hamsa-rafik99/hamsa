@@ -10,3 +10,15 @@ Site name: set `SITE_NAME="..."` (default همسه). Public URL used in emails: 
 
 ## Free deploy (Render)
 Push this folder to a GitHub repo, then Render > New > Blueprint (uses render.yaml). Free plan sleeps after 15 min idle and its disk is erased on restart/redeploy, so data does not persist. Set BASE_URL to the service URL.
+
+## Admin dashboard
+Set `ADMIN_PASSWORD` (16+ chars) in the environment, then open `/#/admin`. Without it the admin API does not exist (404).
+The admin sees counts and metadata only. Message text is visible only for threads the owner reported or the word filter flagged. Every action goes to the audit log.
+Run `node test-admin.js` to check it.
+
+## Durable storage (optional, free)
+Without it, data lives in `data.json` (wiped on Render's free plan). To keep data across deploys, create a Supabase project and run:
+
+    create table kv (id text primary key, data jsonb not null);
+
+then set `SUPABASE_URL` and `SUPABASE_SERVICE_KEY`. The whole database is stored as one row. The server refuses to start if it cannot load it, so it never overwrites good data with an empty one.
