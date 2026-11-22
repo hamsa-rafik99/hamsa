@@ -20,7 +20,7 @@ function bubbles(msgs, ownerView, ownerName, ownerAv) {
   return `<div class="conv"><div class="hbrand"><span class="hb-mark">${esc(SITE)}</span><i></i><span>محادثة مجهولة</span></div><div class="chat">${rows}</div></div>`;
 }
 const brandline = () => `<div class="brandline">من <b>${esc(SITE)}</b> · رسايل مجهولة، وردود حقيقية</div>`;
-const av = (u, cls = '') => u.avatar ? `<img class="av ${cls}" src="${u.avatar}" alt="">` : `<div class="av ${cls}">${esc((u.name || '?')[0])}</div>`;
+const av = (u, cls = '') => u.avatar ? `<img class="av ${cls}" src="${u.avatar}" alt="${esc(u.name || '')}">` : `<div class="av ${cls}">${esc((u.name || '?')[0])}</div>`;
 const nf = n => Number(n).toLocaleString('ar-EG');
 const since = t => t ? new Date(t).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' }) : '—';
 const profileHead = (u, owner) => `<div class="pcard"><div class="cover ${u.cover ? '' : 'nocover'}" ${u.cover ? `style="background-image:url(${u.cover})"` : ''}></div><div class="pbody">${av(u, 'big')}<h1>${esc(u.name)}</h1><div class="handle">@${esc(u.username)}</div>
@@ -28,6 +28,10 @@ const profileHead = (u, owner) => `<div class="pcard"><div class="cover ${u.cove
   ${owner && u.bio ? `<p class="bio">${esc(u.bio)}</p>` : ''}</div></div>`;
 const bigCopy = (text, label) => `<div class="invlink" dir="ltr">${esc(text)}</div><button class="copybtn" data-act="copy" data-text="${esc(text)}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>${label}</span></button>`;
 const copyBtn = (id, text) => `<button class="btn sm ghost" data-act="copy" data-text="${esc(text)}">نسخ</button>`;
+// auto-growing composer textarea
+const grow = t => { t.style.height = '46px'; const h = Math.min(t.scrollHeight, 120); t.style.height = h + 'px'; t.style.overflowY = t.scrollHeight > 120 ? 'auto' : 'hidden'; };
+document.addEventListener('input', e => { if (e.target.matches('.composer textarea')) grow(e.target); });
+
 // one delegated click handler instead of inline onclick attributes (lets the CSP forbid inline scripts)
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-act]'); if (!b) return;
@@ -87,7 +91,7 @@ async function pageJoin(code) {
 async function pageAuth(signupFirst) {
   let user = null; try { user = await api('/me'); } catch {}
   if (user) { location.hash = '#/inbox'; return; }
-  app.innerHTML = shell(`<div class="card center"><div class="avatar">ص</div><h1>${esc(SITE)}</h1><p class="sub">استقبل رسايل من أصحابك من غير ما يظهر اسمهم. وتقدر ترد عليهم، وهم يتابعوا الرد بكود خاص.</p>
+  app.innerHTML = shell(`<div class="card center"><div class="avatar">ه</div><h1>${esc(SITE)}</h1><p class="sub">استقبل رسايل من أصحابك من غير ما يظهر اسمهم. وتقدر ترد عليهم، وهم يتابعوا الرد بكود خاص.</p>
   <div class="tabs"><button class="btn full" id="tl">دخول</button><button class="btn full ghost" id="ts">حساب جديد</button></div>
   <form id="f"><input id="un" placeholder="اسم المستخدم أو الإيميل" dir="ltr" autocomplete="username" autocapitalize="none" spellcheck="false"><input id="nm" placeholder="الاسم اللي هيظهر" style="display:none"><input id="em" type="email" dir="ltr" placeholder="الإيميل (لاسترجاع كلمة السر والإشعارات)" style="display:none"><input id="pw" type="password" placeholder="كلمة السر" dir="ltr" autocomplete="current-password"><p class="err" id="er"></p><button class="btn full" id="go">دخول</button><p style="margin:12px 0 0"><a href="#/forgot" id="fg" class="mut">نسيت كلمة السر؟</a></p></form></div>
   <div class="card center"><p class="sub" style="margin:0">معاك كود رسالة بعتها قبل كده؟</p><a class="btn ghost sm" href="#/follow" style="margin-top:8px">تابع الردود</a></div><p class="center" style="margin:8px 0 0"><a class="mut" href="#/">→ الصفحة الرئيسية</a></p>`);
@@ -116,7 +120,7 @@ async function pageTrack(c) {
   const draw = async (post) => {
     const t = await api('/t/' + c, post ? 'POST' : 'GET', post);
     app.innerHTML = shell(`<div class="card"><div class="center">${av(t.to)}<h1 style="font-size:20px">${esc(t.to.name)}</h1><p class="mut" style="margin:0">محادثة مجهولة · ${t.code}</p><button class="btn sm ghost" id="shr" style="margin-top:8px">📷 شارك كصورة</button></div>${bubbles(t.msgs, false, t.to.name, t.to.avatar)}
-    <form class="composer" id="f"><textarea id="tx" maxlength="1000" placeholder="اكتب رسالة جديدة..."></textarea><button class="send" aria-label="إرسال">${plane}</button></form>${brandline()}
+    <form class="composer" id="f"><textarea id="tx" maxlength="1000" placeholder="اكتب رسالتك..."></textarea><button class="send" aria-label="إرسال">${plane}</button></form>${brandline()}
     ${t.msgs.some(m => m.from === 'owner') ? '' : '<p class="mut center" style="margin-bottom:0">لسه مفيش رد. الصفحة بتتحدث لوحدها.</p>'}</div>`);
     $('#shr').onclick = () => shareDialog(t.msgs, t.to.name, false);
     $('#f').onsubmit = e => { e.preventDefault(); if ($('#tx').value.trim()) draw({ text: $('#tx').value }); };
@@ -138,7 +142,7 @@ async function pageInbox() {
 async function pageThread(id) {
   const t = await api('/inbox/' + id), u0 = await api('/me');
   app.innerHTML = shell(`<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:6px"><a href="#/inbox" class="mut">→ الرسايل</a><span class="row"><button class="btn sm ghost" id="shr">📷 صورة</button><button class="btn sm ghost" id="st">${t.starred ? '⭐ مفضلة' : '☆ تفضيل'}</button><button class="btn sm ghost" id="rp">إبلاغ</button><button class="btn sm ghost" id="bl">حظر</button><button class="btn sm ghost" id="dl">حذف</button></span></div>${bubbles(t.msgs, true, u0.name, u0.avatar)}
-  <form class="composer" id="f"><textarea id="tx" maxlength="1000" placeholder="اكتب ردك... المرسل هيشوفه بالكود بتاعه"></textarea><button class="send" aria-label="إرسال">${plane}</button></form>${brandline()}</div>`);
+  <form class="composer" id="f"><textarea id="tx" maxlength="1000" placeholder="اكتب ردك..."></textarea><button class="send" aria-label="إرسال">${plane}</button></form>${brandline()}</div>`);
   $('#f').onsubmit = async e => { e.preventDefault(); if (!$('#tx').value.trim()) return; await api(`/inbox/${id}/reply`, 'POST', { text: $('#tx').value }); pageThread(id); };
   $('#shr').onclick = () => shareDialog(t.msgs, u0.name, true);
   $('#st').onclick = async () => { await api(`/inbox/${id}/star`, 'POST'); pageThread(id); };
@@ -188,7 +192,7 @@ async function pageOutbox() {
   ${outbox.length ? outbox.map(o => `<div class="out"><div class="t"><b>${ic[o.channel] || o.channel}</b><span class="mut">${time(o.t)}</span></div><div dir="ltr" class="mut" style="text-align:right">${esc(o.to)}</div><div><b>${esc(o.subject)}</b></div><div class="mut" style="white-space:pre-wrap;word-break:break-all">${esc(o.text)}</div><span class="badge">${esc(o.status)}</span></div>`).join('') : '<div class="empty">مفيش رسايل لسه.</div>'}</div><a href="#/settings" class="mut">→ رجوع</a>`);
 }
 addEventListener('hashchange', route);
-fetch('/api/config').then(r => r.json()).then(c => { SITE = c.name; document.title = c.name; }).catch(() => {}).finally(route);
+fetch('/api/config').then(r => r.json()).then(c => { SITE = c.name; document.title = c.name + ' — رسايل مجهولة من أصحابك'; }).catch(() => {}).finally(route);
 // ---- share a conversation as an image (drawn in the browser, nothing is uploaded)
 function wrap(g, text, maxW) { const out = []; for (const para of text.split('\n')) { let line = ''; for (const w of para.split(' ')) { const t = line ? line + ' ' + w : w; if (g.measureText(t).width > maxW && line) { out.push(line); line = w; } else line = t; } out.push(line); } return out; }
 function chatImage(msgs, ownerName, ownerView) {

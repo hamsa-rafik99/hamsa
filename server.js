@@ -214,7 +214,18 @@ async function api(req, res, url) {
 }
 function login(res, un) { admin.bump('logins'); if (db.users[un]) db.users[un].last = Date.now(); const sid = rid(32); db.sessions[sha(sid)] = { u: un, t: Date.now() }; save(); send(res, 200, { username: un }, { 'Set-Cookie': `sid=${sid}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${HTTPS ? '; Secure' : ''}` }); }
 
-const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml' };
+const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.png': 'image/png', '.txt': 'text/plain; charset=utf-8' };
+const escHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+// SEO / AI-SEO: index.html is a template; these routes serve crawlers and chat agents.
+function renderIndex() {
+  const SNAME = db.settings.siteName || SITE_NAME;
+  const ld = JSON.stringify({ '@context': 'https://schema.org', '@type': 'WebApplication', name: SNAME, alternateName: 'Hamsa', url: BASE + '/', description: 'منصة عربية للرسائل المجهولة: شارك رابطك واستقبل رسائل بدون أسماء ورد عليها في محادثة حديثة.', inLanguage: 'ar', applicationCategory: 'SocialNetworkingApplication', operatingSystem: 'Web', browserRequirements: 'Requires JavaScript', offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }, featureList: 'anonymous messages, chat-style replies, sender follow-up code, share conversation as image' }).replace(/</g, '\\u003c');
+  const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8').split('__SITENAME__').join(escHtml(SNAME)).split('__BASE__').join(escHtml(BASE)).split('__LD__').join(ld);
+  const hash = crypto.createHash('sha256').update(ld).digest('base64');
+  return { html, csp: SEC['Content-Security-Policy'].replace("script-src 'self'", `script-src 'self' 'sha256-${hash}'`) };
+}
+const llms = () => `# ${db.settings.siteName || SITE_NAME}\n\n> Anonymous messaging in Arabic (RTL): create a page, share your link, receive anonymous messages and reply in a chat-style thread. Senders stay anonymous and follow replies with a private code. Free.\n\n## Pages\n- ${BASE}/ : landing page (Arabic)\n- ${BASE}/#/signup and ${BASE}/#/login : account creation and sign-in\n- ${BASE}/#/u/{username} : public page to send an anonymous message to that user\n- ${BASE}/#/t/{CODE} : sender follows replies using the private code\n- ${BASE}/#/inbox : owner's inbox (requires sign-in)\n- ${BASE}/#/settings : profile, notifications, invite link\n\n## Notes\n- Hash-based single-page app: routes live after '#'.\n- Messages are private. The admin dashboard shows metadata only; message text is visible only for reported threads.\n- API endpoints under /api/ are for the app, not public data.\n`;
+const manifest = () => JSON.stringify({ name: (db.settings.siteName || SITE_NAME) + ' — رسايل مجهولة', short_name: db.settings.siteName || SITE_NAME, start_url: '/', display: 'standalone', dir: 'rtl', lang: 'ar', background_color: '#171210', theme_color: '#e0553b', icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }] });
 const server = http.createServer(async (req, res) => {
   metrics.requests++;
   try {
@@ -229,7 +240,12 @@ const server = http.createServer(async (req, res) => {
       return await api(req, res, url);
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, SEC); return res.end(); }
-    const f = ['/app.js', '/style.css', '/admin-ui.js'].includes(url.pathname) ? url.pathname : '/index.html'; // fixed whitelist: no path traversal possible
+    if (url.pathname === '/robots.txt') { res.writeHead(200, { 'Content-Type': types['.txt'], 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : `User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: ${BASE}/sitemap.xml\n`); }
+    if (url.pathname === '/sitemap.xml') { res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${BASE}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url></urlset>`); }
+    if (url.pathname === '/llms.txt') { res.writeHead(200, { 'Content-Type': types['.txt'], 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : llms()); }
+    if (url.pathname === '/manifest.webmanifest') { res.writeHead(200, { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : manifest()); }
+    const f = ['/app.js', '/style.css', '/admin-ui.js', '/favicon.svg', '/favicon.ico', '/og.png', '/icon-180.png', '/icon-192.png', '/icon-512.png'].includes(url.pathname) ? (url.pathname === '/favicon.ico' ? '/favicon.svg' : url.pathname) : '/index.html'; // fixed whitelist: no path traversal possible
+    if (f === '/index.html') { const { html, csp } = renderIndex(); res.writeHead(200, { 'Content-Type': types['.html'], 'Cache-Control': 'no-cache', ...SEC, 'Content-Security-Policy': csp }); return res.end(req.method === 'HEAD' ? undefined : html); }
     const data = fs.readFileSync(path.join(PUB, f));
     res.writeHead(200, { 'Content-Type': types[path.extname(f)], 'Cache-Control': 'no-cache', ...SEC }); res.end(req.method === 'HEAD' ? undefined : data);
   } catch (e) {
