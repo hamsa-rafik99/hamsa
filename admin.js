@@ -8,7 +8,7 @@ const dayKey = (t = Date.now()) => new Date(t).toISOString().slice(0, 10);
 
 module.exports = function createAdmin(ctx) {
   const { db, send, limited, ip, fpOf, sha, same, hash, save, cookie, HTTPS, metrics } = ctx;
-  const pass = process.env.ADMIN_PASSWORD || '';
+  const pass = (process.env.ADMIN_PASSWORD || '').replace(/\s+/g, '');
   const enabled = pass.length >= 16;
   const salt = crypto.randomBytes(16).toString('hex');
   const passHash = enabled ? hash(pass, salt) : '';

@@ -11,7 +11,7 @@ const BASE = process.env.BASE_URL || 'http://localhost:' + PORT;
 const HTTPS = BASE.startsWith('https://');
 const DEV_OUTBOX = process.env.DEV_OUTBOX ? process.env.DEV_OUTBOX !== '0' : !HTTPS; // local testing mailbox; off in production
 let saveTimer;
-const SB_URL = (process.env.SUPABASE_URL || '').replace(/\/$/, ''), SB_KEY = process.env.SUPABASE_SERVICE_KEY || '';
+const SB_URL = (process.env.SUPABASE_URL || '').replace(/\s+/g, '').replace(/\/$/, ''), SB_KEY = (process.env.SUPABASE_SERVICE_KEY || '').replace(/\s+/g, '');
 const remote = async (method, q, payload) => { const r = await fetch(SB_URL + '/rest/v1/kv' + q, { method, headers: { apikey: SB_KEY, ...(SB_KEY.startsWith('sb_') ? {} : { Authorization: 'Bearer ' + SB_KEY }), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' }, body: payload ? JSON.stringify(payload) : undefined }); if (!r.ok) throw new Error('remote ' + r.status); return method === 'GET' ? r.json() : null; };
 let remoteBusy = false, remoteDirty = false;
 const flushRemote = async () => { if (!SB_URL) return; if (remoteBusy) { remoteDirty = true; return; } remoteBusy = true; try { await remote('POST', '', { id: 'db', data: db }); } catch (e) { console.error('remote save failed', e.message); } remoteBusy = false; if (remoteDirty) { remoteDirty = false; flushRemote(); } };
