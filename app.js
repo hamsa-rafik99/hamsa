@@ -6,7 +6,7 @@ const origin = location.origin;
 let SITE = 'همسه';
 const theme = () => localStorage.getItem('theme') || 'dark';
 document.documentElement.dataset.theme = theme();
-const themeBtn = () => `<button class="theme" id="th" title="الوضع الفاتح/الداكن" onclick="localStorage.setItem('theme', theme() === 'dark' ? 'light' : 'dark'); document.documentElement.dataset.theme = theme()">◐</button>`;
+const themeBtn = () => `<button class="theme" data-act="theme" title="الوضع الفاتح/الداكن" aria-label="تغيير الثيم">◐</button>`;
 const shell = (inner, nav = '') => `<div class="wrap"><div class="top"><a class="brand" href="#/">${esc(SITE)}</a><div class="row" style="align-items:center">${nav} ${themeBtn()}</div></div>${inner}</div>`;
 let timer;
 function bubbles(msgs, ownerView, ownerName) {
@@ -19,7 +19,13 @@ const since = t => t ? new Date(t).toLocaleDateString('ar-EG', { month: 'long', 
 const profileHead = (u, owner) => `<div class="pcard"><div class="cover ${u.cover ? '' : 'nocover'}" ${u.cover ? `style="background-image:url(${u.cover})"` : ''}></div><div class="pbody">${av(u, 'big')}<h1>${esc(u.name)}</h1><div class="handle">@${esc(u.username)}</div>
   <div class="stats" style="grid-template-columns:repeat(${owner ? 4 : 3},1fr)"><div><b>${nf(u.stats.received)}</b><span>رسالة</span></div><div><b>${nf(u.stats.replies)}</b><span>رد</span></div>${owner ? `<div><b>${nf(u.views)}</b><span>زيارة</span></div>` : ''}<div><b>${since(u.since)}</b><span>انضم</span></div></div>
   ${owner && u.bio ? `<p class="bio">${esc(u.bio)}</p>` : ''}</div></div>`;
-const copyBtn = (id, text) => `<button class="btn sm ghost" onclick="navigator.clipboard.writeText('${text}');this.textContent='تم النسخ ✓'">نسخ</button>`;
+const copyBtn = (id, text) => `<button class="btn sm ghost" data-act="copy" data-text="${esc(text)}">نسخ</button>`;
+// one delegated click handler instead of inline onclick attributes (lets the CSP forbid inline scripts)
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-act]'); if (!b) return;
+  if (b.dataset.act === 'theme') { localStorage.setItem('theme', theme() === 'dark' ? 'light' : 'dark'); document.documentElement.dataset.theme = theme(); }
+  if (b.dataset.act === 'copy') { const done = () => { b.textContent = 'تم النسخ ✓'; }; (navigator.clipboard ? navigator.clipboard.writeText(b.dataset.text).then(done, done) : done()); }
+});
 
 async function route() {
   clearInterval(timer);

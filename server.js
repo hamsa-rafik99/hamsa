@@ -2,28 +2,44 @@
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
 const PORT = process.env.PORT || 3000;
 const DB_FILE = process.env.DB_FILE || path.join(__dirname, 'data.json');
-const PUB = require('fs').existsSync(path.join(__dirname, 'public')) ? path.join(__dirname, 'public') : __dirname;
-let db = { users: {}, threads: {}, sessions: {}, outbox: [], resets: {} };
+const PUB = fs.existsSync(path.join(__dirname, 'public')) ? path.join(__dirname, 'public') : __dirname;
+let db = { users: {}, threads: {}, sessions: {}, outbox: [], resets: {}, secret: '' };
 try { db = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')); } catch {}
-db.outbox = db.outbox || []; db.resets = db.resets || {};
+db.outbox = db.outbox || []; db.resets = db.resets || {}; db.secret = db.secret || crypto.randomBytes(32).toString('hex');
 const SITE_NAME = process.env.SITE_NAME || 'همسه'; // change the site name here or via env
 const BASE = process.env.BASE_URL || 'http://localhost:' + PORT;
-const DEV_OUTBOX = process.env.DEV_OUTBOX !== '0'; // local testing mailbox; turn off in production
-let saveTimer; const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(() => fs.writeFileSync(DB_FILE, JSON.stringify(db)), 50); };
+const HTTPS = BASE.startsWith('https://');
+const DEV_OUTBOX = process.env.DEV_OUTBOX ? process.env.DEV_OUTBOX !== '0' : !HTTPS; // local testing mailbox; off in production
+let saveTimer;
+const flush = () => { try { fs.writeFileSync(DB_FILE + '.tmp', JSON.stringify(db)); fs.renameSync(DB_FILE + '.tmp', DB_FILE); } catch (e) { console.error('save failed', e.message); } }; // atomic write
+const save = () => { clearTimeout(saveTimer); saveTimer = setTimeout(flush, 50); };
+process.on('SIGTERM', () => { flush(); process.exit(0); });
+process.on('uncaughtException', e => console.error('uncaught', e.message));
+process.on('unhandledRejection', e => console.error('unhandled', e && e.message));
 const rid = n => crypto.randomBytes(n).toString('base64url');
 const code = () => { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (const b of crypto.randomBytes(10)) s += a[b % a.length]; return s.slice(0,5)+'-'+s.slice(5); };
-const hash = (pw, salt) => crypto.scryptSync(pw, salt, 32).toString('hex');
+const hash = (pw, salt) => crypto.scryptSync(String(pw).slice(0, 200), salt, 32).toString('hex');
+const same = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && crypto.timingSafeEqual(x, y); };
+const sha = v => crypto.createHash('sha256').update(String(v)).digest('hex');
+const DUMMY = { salt: 'x', pw: hash('dummy', 'x') }; // keeps login timing equal for unknown users
+const SESSION_MS = 30 * 864e5;
 const hits = {}; // simple rate limit
+setInterval(() => { const n = Date.now(); for (const k of Object.keys(hits)) { hits[k] = hits[k].filter(t => n - t < 36e5); if (!hits[k].length) delete hits[k]; } for (const [k, s] of Object.entries(db.sessions)) if (n - s.t > SESSION_MS) delete db.sessions[k]; for (const [k, r] of Object.entries(db.resets)) if (r.exp < n) delete db.resets[k]; }, 600e3).unref();
 const limited = (k, max, ms) => { const n = Date.now(); hits[k] = (hits[k] || []).filter(t => n - t < ms); if (hits[k].length >= max) return true; hits[k].push(n); return false; };
-const send = (res, st, obj, hdr = {}) => { res.writeHead(st, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...hdr }); res.end(JSON.stringify(obj)); };
-const body = req => new Promise((ok, no) => { let d = ''; req.on('data', c => { d += c; if (d.length > 600000) { no(); req.destroy(); } }); req.on('end', () => { try { ok(JSON.parse(d || '{}')); } catch { ok({}); } }); });
-const cookie = req => Object.fromEntries((req.headers.cookie || '').split(/;\s*/).filter(Boolean).map(c => c.split('=').map(decodeURIComponent)));
-const me = req => { const s = db.sessions[cookie(req).sid]; return s && db.users[s.u] ? db.users[s.u] : null; };
+const SEC = { 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cross-Origin-Opener-Policy': 'same-origin', 'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
+  'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
+  ...(HTTPS ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' } : {}) };
+const send = (res, st, obj, hdr = {}) => { res.writeHead(st, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store', ...SEC, ...hdr }); res.end(JSON.stringify(obj)); };
+const body = req => new Promise((ok, no) => { let d = '', n = 0; req.on('data', c => { n += c.length; if (n > 600000) { no(Object.assign(new Error('big'), { status: 413 })); req.destroy(); } else d += c; }); req.on('end', () => { try { const j = JSON.parse(d || '{}'); ok(j && typeof j === 'object' && !Array.isArray(j) ? j : {}); } catch { ok({}); } }); req.on('error', () => ok({})); });
+const cookie = req => { const o = {}; for (const c of (req.headers.cookie || '').split(/;\s*/)) { const i = c.indexOf('='); if (i > 0) { try { o[c.slice(0, i)] = decodeURIComponent(c.slice(i + 1)); } catch {} } } return o; };
+const me = req => { const sid = cookie(req).sid, s = sid && db.sessions[sha(sid)]; if (!s) return null; if (Date.now() - s.t > SESSION_MS) { delete db.sessions[sha(sid)]; return null; } return db.users[s.u] || null; };
 const clean = (t, max) => String(t || '').replace(/\s+\n/g, '\n').trim().slice(0, max);
 const img = v => typeof v === 'string' && v.length < 260000 && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(v);
 const stats = un => { let got = 0, rep = 0, th = 0; for (const t of Object.values(db.threads)) if (t.to === un) { th++; got += t.msgs.filter(m => m.from === 'anon').length; rep += t.msgs.filter(m => m.from === 'owner').length; } return { received: got, replies: rep, threads: th }; };
 const pub = u => ({ username: u.username, name: u.name, bio: u.bio, avatar: u.avatar || '', cover: u.cover || '', since: u.created || 0, views: u.views || 0, stats: stats(u.username) });
-const ip = req => req.socket.remoteAddress;
+// Real client address behind Render/Cloudflare. Used ONLY for rate limits and the hidden block fingerprint, never stored in the clear.
+const ip = req => String(req.headers['cf-connecting-ip'] || (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress);
+const fpOf = req => crypto.createHmac('sha256', db.secret).update(ip(req)).digest('hex').slice(0, 16);
 
 
 // ---- Outgoing messages. Every message is saved to the local outbox. It is also really sent
@@ -61,10 +77,10 @@ async function api(req, res, url) {
   if (p === '/api/signup' && m === 'POST') {
     const un = clean(b.username, 20).toLowerCase();
     if (!/^[a-z0-9_]{3,20}$/.test(un)) return send(res, 400, { error: 'اسم المستخدم لازم يكون ٣ إلى ٢٠ حرف إنجليزي أو أرقام أو _' });
-    if (String(b.password || '').length < 6) return send(res, 400, { error: 'كلمة السر لازم تكون ٦ حروف على الأقل' });
-    if (db.users[un]) return send(res, 409, { error: 'اسم المستخدم ده مستخدم قبل كده' });
+    if (String(b.password || '').length < 6 || String(b.password).length > 200) return send(res, 400, { error: 'كلمة السر لازم تكون من ٦ لـ ٢٠٠ حرف' });
     if (limited('su' + ip(req), 10, 3600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
-    const salt = rid(8);
+    if (db.users[un]) return send(res, 409, { error: 'اسم المستخدم ده مستخدم قبل كده' });
+    const salt = rid(16);
     const em = clean(b.email, 100).toLowerCase(); if (em && !emailOk(em)) return send(res, 400, { error: 'الإيميل مش مظبوط' });
     if (em && Object.values(db.users).some(x => x.email === em)) return send(res, 409, { error: 'الإيميل ده مستخدم قبل كده' });
     db.users[un] = { username: un, name: clean(b.name, 40) || un, bio: '', salt, pw: hash(b.password, salt), blocked: [], open: true, created: Date.now(), email: em, notify: { email: !!em, onMessage: true, onFollowup: true } };
@@ -72,11 +88,12 @@ async function api(req, res, url) {
   }
   if (p === '/api/login' && m === 'POST') {
     const un = clean(b.username, 20).toLowerCase(), x = db.users[un];
-    if (limited('li' + ip(req) + un, 8, 600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
-    if (!x || hash(String(b.password || ''), x.salt) !== x.pw) return send(res, 401, { error: 'اسم المستخدم أو كلمة السر غلط' });
+    if (limited('li' + ip(req) + un, 8, 600e3) || limited('lu' + un, 30, 3600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
+    const y = x || DUMMY;
+    if (!same(hash(b.password || '', y.salt), y.pw) || !x) return send(res, 401, { error: 'اسم المستخدم أو كلمة السر غلط' });
     return login(res, un);
   }
-  if (p === '/api/logout' && m === 'POST') { delete db.sessions[cookie(req).sid]; save(); return send(res, 200, { ok: 1 }, { 'Set-Cookie': 'sid=; Path=/; Max-Age=0' }); }
+  if (p === '/api/logout' && m === 'POST') { delete db.sessions[sha(cookie(req).sid || '')]; save(); return send(res, 200, { ok: 1 }, { 'Set-Cookie': `sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${HTTPS ? '; Secure' : ''}` }); }
   if (p === '/api/me') return u ? send(res, 200, { ...pub(u), open: u.open, email: u.email || '' }) : send(res, 401, { error: 'auth' });
   if (p === '/api/forgot' && m === 'POST') {
     const id = clean(b.id, 100).toLowerCase();
@@ -90,15 +107,16 @@ async function api(req, res, url) {
     const k = crypto.createHash('sha256').update(String(b.token || '')).digest('hex'), r0 = db.resets[k];
     if (!r0 || r0.exp < Date.now()) return send(res, 400, { error: 'اللينك منتهي أو غير صحيح' });
     if (String(b.password || '').length < 6) return send(res, 400, { error: 'كلمة السر لازم تكون ٦ حروف على الأقل' });
-    const x = db.users[r0.u]; x.salt = rid(8); x.pw = hash(b.password, x.salt); delete db.resets[k];
+    const x = db.users[r0.u]; x.salt = rid(16); x.pw = hash(b.password, x.salt); delete db.resets[k];
     for (const [sid, ss] of Object.entries(db.sessions)) if (ss.u === x.username) delete db.sessions[sid];
     save(); return send(res, 200, { ok: 1 });
   }
   if (p === '/api/password' && m === 'POST') {
     if (!u) return send(res, 401, { error: 'auth' });
-    if (hash(String(b.old || ''), u.salt) !== u.pw) return send(res, 400, { error: 'كلمة السر الحالية غلط' });
-    if (String(b.password || '').length < 6) return send(res, 400, { error: 'كلمة السر الجديدة لازم تكون ٦ حروف على الأقل' });
-    u.salt = rid(8); u.pw = hash(b.password, u.salt); save(); return send(res, 200, { ok: 1 });
+    if (!same(hash(b.old || '', u.salt), u.pw)) return send(res, 400, { error: 'كلمة السر الحالية غلط' });
+    if (String(b.password || '').length < 6 || String(b.password).length > 200) return send(res, 400, { error: 'كلمة السر الجديدة لازم تكون من ٦ لـ ٢٠٠ حرف' });
+    if (limited('pw' + u.username, 10, 3600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
+    u.salt = rid(16); u.pw = hash(b.password, u.salt); save(); return send(res, 200, { ok: 1 });
   }
   if (p === '/api/notify') {
     if (!u) return send(res, 401, { error: 'auth' });
@@ -130,18 +148,21 @@ async function api(req, res, url) {
     if (!x.open) return send(res, 403, { error: 'صاحب الصفحة قافل استقبال الرسايل دلوقتي' });
     const text = clean(b.text, 1000); if (!text) return send(res, 400, { error: 'اكتب رسالة الأول' });
     if (limited('sd' + ip(req), 15, 600e3)) return send(res, 429, { error: 'بتبعت بسرعة، استنى شوية' });
-    const fp = crypto.createHash('sha256').update(ip(req) + 's').digest('hex').slice(0, 16);
+    const fp = fpOf(req);
+    if (limited('rc' + x.username, 60, 3600e3)) return send(res, 429, { error: 'الصفحة دي جاتلها رسايل كتير، جرب بعد شوية' });
     if ((x.blocked || []).includes(fp)) return send(res, 200, { code: code() }); // blocked senders look like success
     const c = code();
     db.threads[c] = { code: c, to: x.username, fp, created: Date.now(), starred: false, unread: true, msgs: [{ from: 'anon', text, t: Date.now() }] };
     save(); notify(x, 'new', 'وصلتك رسالة جديدة على همسه.'); return send(res, 200, { code: c });
   }
   if ((r = p.match(/^\/api\/t\/([A-Z0-9-]+)$/))) {
-    const t = db.threads[r[1]]; if (!t) return send(res, 404, { error: 'الكود ده مش صحيح' });
+    const t = db.threads[r[1]];
+    if (!t) return send(res, limited('tg' + ip(req), 30, 600e3) ? 429 : 404, { error: 'الكود ده مش صحيح' }); // only wrong guesses count: blocks code brute-forcing
     const x = db.users[t.to];
     if (m === 'POST') {
       const text = clean(b.text, 1000); if (!text) return send(res, 400, { error: 'اكتب رسالة الأول' });
       if (limited('tp' + ip(req), 30, 600e3)) return send(res, 429, { error: 'بتبعت بسرعة، استنى شوية' });
+      if (t.msgs.length >= 300) return send(res, 400, { error: 'المحادثة وصلت للحد الأقصى' });
       t.msgs.push({ from: 'anon', text, t: Date.now() }); t.unread = true; save(); notify(x, 'follow', 'وصلك رد جديد من مرسل مجهول.');
     }
     t.senderSeen = Date.now(); if (m !== 'POST') save();
@@ -167,15 +188,28 @@ async function api(req, res, url) {
   }
   send(res, 404, { error: 'not found' });
 }
-function login(res, un) { const sid = rid(24); db.sessions[sid] = { u: un, t: Date.now() }; save(); send(res, 200, { username: un }, { 'Set-Cookie': `sid=${sid}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000` }); }
+function login(res, un) { const sid = rid(32); db.sessions[sha(sid)] = { u: un, t: Date.now() }; save(); send(res, 200, { username: un }, { 'Set-Cookie': `sid=${sid}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000${HTTPS ? '; Secure' : ''}` }); }
 
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml' };
-http.createServer(async (req, res) => {
+const server = http.createServer(async (req, res) => {
   try {
     const url = new URL(req.url, 'http://x');
-    if (url.pathname.startsWith('/api/')) return await api(req, res, url);
-    let f = url.pathname === '/app.js' || url.pathname === '/style.css' ? url.pathname : '/index.html';
+    if (url.pathname.startsWith('/api/')) {
+      // CSRF: state-changing requests must come from this site (Origin check) and be JSON. SameSite cookies add a second layer.
+      if (req.method !== 'GET' && req.method !== 'HEAD') {
+        const o = req.headers.origin;
+        if (o && (() => { try { return new URL(o).host !== req.headers.host; } catch { return true; } })()) return send(res, 403, { error: 'forbidden' });
+        if (req.method === 'POST' && !String(req.headers['content-type'] || '').startsWith('application/json') && Number(req.headers['content-length'] || 0) > 0) return send(res, 415, { error: 'bad type' });
+      }
+      return await api(req, res, url);
+    }
+    if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, SEC); return res.end(); }
+    const f = url.pathname === '/app.js' || url.pathname === '/style.css' ? url.pathname : '/index.html'; // fixed whitelist: no path traversal possible
     const data = fs.readFileSync(path.join(PUB, f));
-    res.writeHead(200, { 'Content-Type': types[path.extname(f)], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' }); res.end(data);
-  } catch (e) { res.writeHead(500); res.end('error'); }
-}).listen(PORT, () => console.log('http://localhost:' + PORT));
+    res.writeHead(200, { 'Content-Type': types[path.extname(f)], 'Cache-Control': 'no-cache', ...SEC }); res.end(req.method === 'HEAD' ? undefined : data);
+  } catch (e) {
+    if (!res.headersSent) { const st = e && e.status === 413 ? 413 : 500; res.writeHead(st, { 'Content-Type': 'application/json', ...SEC }); res.end(JSON.stringify({ error: st === 413 ? 'too large' : 'server error' })); }
+  }
+});
+server.requestTimeout = 20000; server.headersTimeout = 10000; server.keepAliveTimeout = 5000;
+server.listen(PORT, () => console.log('http://localhost:' + PORT));
