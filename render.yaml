@@ -1,0 +1,14 @@
+services:
+  - type: web
+    name: hamsa
+    runtime: node
+    plan: free
+    buildCommand: "echo no build"
+    startCommand: node server.js
+    envVars:
+      - key: SITE_NAME
+        value: همسه
+      - key: DEV_OUTBOX
+        value: "0"
+      - key: BASE_URL
+        sync: false   # set to the Render URL after first deploy
