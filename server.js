@@ -176,6 +176,6 @@ http.createServer(async (req, res) => {
     if (url.pathname.startsWith('/api/')) return await api(req, res, url);
     let f = url.pathname === '/app.js' || url.pathname === '/style.css' ? url.pathname : '/index.html';
     const data = fs.readFileSync(path.join(PUB, f));
-    res.writeHead(200, { 'Content-Type': types[path.extname(f)], 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' }); res.end(data);
+    res.writeHead(200, { 'Content-Type': types[path.extname(f)], 'Cache-Control': 'no-cache', 'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' }); res.end(data);
   } catch (e) { res.writeHead(500); res.end('error'); }
 }).listen(PORT, () => console.log('http://localhost:' + PORT));

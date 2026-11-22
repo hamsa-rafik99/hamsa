@@ -102,7 +102,9 @@ async function pageInbox() {
   ${threads.length ? threads.map(t => `<a class="thread ${t.unread ? 'unread' : ''}" href="#/inbox/${t.id}"><div class="t"><b>${t.starred ? '⭐ ' : ''}مجهول</b><span class="mut">${time(t.last.t)}</span></div><div class="m mut">${t.last.from === 'owner' ? 'أنت: ' : ''}${esc(t.last.text)}</div><div style="margin-top:4px">${t.count > 1 ? `<span class="badge">${t.count} رسايل</span> ` : ''}${t.replied ? '<span class="badge">اترد عليها</span>' : ''}</div></a>`).join('') : '<div class="empty">مفيش رسايل لسه.<br>أول ما حد يبعتلك هتظهر هنا.</div>'}`,
     `<a class="btn sm ghost" href="#/settings">الإعدادات</a> <button class="btn sm ghost" id="out">خروج</button>`);
   $('#out').onclick = async () => { await api('/logout', 'POST'); location.hash = '#/'; location.reload(); };
-  timer = setInterval(async () => { if (location.hash === '#/inbox') pageInbox(); }, 15000);
+  const sig = JSON.stringify(threads.map(t => [t.id, t.count, t.unread, t.starred, t.replied]));
+  timer = setInterval(async () => { try { if (location.hash !== '#/inbox') return; const r = await api('/inbox'); if (JSON.stringify(r.threads.map(t => [t.id, t.count, t.unread, t.starred, t.replied])) !== sig) pageInbox(); } catch (e) {} }, 15000);
+  document.querySelectorAll('a.thread').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); location.hash = a.getAttribute('href'); }));
 }
 async function pageThread(id) {
   const t = await api('/inbox/' + id), u0 = await api('/me');
