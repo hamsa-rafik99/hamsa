@@ -7,7 +7,33 @@ let SITE = 'همسه';
 const theme = () => localStorage.getItem('theme') || 'dark';
 document.documentElement.dataset.theme = theme();
 const themeBtn = () => `<button class="theme" data-act="theme" title="الوضع الفاتح/الداكن" aria-label="تغيير الثيم">◐</button>`;
-const shell = (inner, nav = '') => `<div class="wrap"><div class="top"><a class="brand" href="#/">${esc(SITE)}</a><div class="row" style="align-items:center">${nav} ${themeBtn()}</div></div>${inner}</div>`;
+const shell = (inner, nav) => `<div class="wrap"><div class="top"><a class="brand" href="#/">${esc(SITE)}</a><div class="row" style="align-items:center">${nav === undefined ? themeBtn() : nav}</div></div>${inner}</div>`;
+const ics = p => `<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${p}</svg>`;
+const icGear = ics('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M2 12h3M19 12h3M4.9 19.1 7 17M17 7l2.1-2.1"/>');
+const icMoon = ics('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>');
+const icUsers = ics('<path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>');
+const icOut = ics('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>');
+const icCopy = ics('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>');
+const userMenu = u => `<div class="umenu"><button class="uav" data-act="menu" aria-label="القائمة">${u.avatar ? `<img src="${u.avatar}" alt="${esc(u.name || '')}">` : `<span>${esc((u.name || '?')[0])}</span>`}</button><div class="udrop" hidden>
+<div class="uhead">${av(u)}<div class="uhi"><b>${esc(u.name)}</b><span class="mut" dir="ltr">@${esc(u.username)}</span></div></div>
+<a class="uit" href="#/settings">${icGear}<span>الإعدادات</span></a>
+<button class="uit" data-act="theme">${icMoon}<span class="mlab">${theme() === 'dark' ? 'الوضع الفاتح' : 'الوضع الداكن'}</span></button>
+<button class="uit" data-act="inv">${icUsers}<span>الدعوات</span></button>
+<button class="uit danger" data-act="out">${icOut}<span>تسجيل الخروج</span></button></div></div>`;
+async function invitePanel() {
+  document.querySelectorAll('.udrop').forEach(d => d.hidden = true);
+  let iv; try { iv = await api('/invite'); } catch { return; }
+  const link = `${origin}/#/join/${iv.code}`;
+  const d = document.createElement('div'); d.className = 'modal';
+  d.innerHTML = `<div class="mbox"><h2 style="margin:2px 0 4px;font-size:19px">الدعوات</h2><p class="sub">شارك لينكك الخاص، وكل واحد يسجل منه بيتحسب ليك.</p>
+  <div class="istats"><div><b>${nf(iv.count)}</b><span>انضموا من لينكك</span></div><div><b>${nf(iv.visits || 0)}</b><span>زيارة للينك</span></div></div>
+  <div class="invlink" dir="ltr">${esc(link)}</div>
+  <button class="copybtn" data-act="copy" data-text="${esc(link)}">${icCopy}<span>نسخ اللينك</span></button>
+  ${navigator.share ? `<button class="btn full" data-act="share" data-text="${esc(link)}" style="margin-top:10px">مشاركة اللينك</button>` : ''}
+  <button class="btn ghost full" style="margin-top:10px" data-act="x">إغلاق</button></div>`;
+  document.body.appendChild(d);
+  d.onclick = e => { if (e.target === d || e.target.closest('[data-act=x]')) d.remove(); };
+}
 let timer;
 const plane = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>`;
 function bubbles(msgs, ownerView, ownerName, ownerAv) {
@@ -34,8 +60,13 @@ document.addEventListener('input', e => { if (e.target.matches('.composer textar
 
 // one delegated click handler instead of inline onclick attributes (lets the CSP forbid inline scripts)
 document.addEventListener('click', e => {
+  const mbtn = e.target.closest('[data-act=menu]');
+  document.querySelectorAll('.udrop:not([hidden])').forEach(d => { if (!mbtn || d.parentElement.querySelector('[data-act=menu]') !== mbtn) d.hidden = true; });
+  if (mbtn) { const d = mbtn.parentElement.querySelector('.udrop'); d.hidden = !d.hidden; return; }
   const b = e.target.closest('[data-act]'); if (!b) return;
-  if (b.dataset.act === 'theme') { localStorage.setItem('theme', theme() === 'dark' ? 'light' : 'dark'); document.documentElement.dataset.theme = theme(); }
+  if (b.dataset.act === 'theme') { localStorage.setItem('theme', theme() === 'dark' ? 'light' : 'dark'); document.documentElement.dataset.theme = theme(); document.querySelectorAll('.mlab').forEach(s => s.textContent = theme() === 'dark' ? 'الوضع الفاتح' : 'الوضع الداكن'); }
+  if (b.dataset.act === 'out') api('/logout', 'POST').finally(() => { location.hash = '#/'; location.reload(); });
+  if (b.dataset.act === 'inv') invitePanel();
   if (b.dataset.act === 'share') navigator.share({ title: SITE, text: 'سجّل على ' + SITE + ' واستقبل رسايل مجهولة', url: b.dataset.text }).catch(() => {});
   if (b.dataset.act === 'copy') { const done = () => { const l = b.querySelector('span'); (l || b).textContent = 'تم النسخ ✓'; b.classList.add('done'); }; (navigator.clipboard ? navigator.clipboard.writeText(b.dataset.text).then(done, done) : done()); }
 });
@@ -132,9 +163,8 @@ async function pageTrack(c) {
 async function pageInbox() {
   const u = await api('/me'), { threads } = await api('/inbox'), link = `${origin}/#/u/${u.username}`;
   app.innerHTML = shell(`${profileHead(u, true)}<div class="card center"><p class="sub">شارك رابطك على ستوري أو بروفايلك واستقبل رسايل مجهولة</p>${bigCopy(link, 'نسخ اللينك')}</div>
-  ${threads.length ? threads.map(t => `<a class="thread ${t.unread ? 'unread' : ''}" href="#/inbox/${t.id}"><div class="t"><b>${t.starred ? '⭐ ' : ''}مجهول</b><span class="mut">${time(t.last.t)}</span></div><div class="m mut">${t.last.from === 'owner' ? 'أنت: ' : ''}${esc(t.last.text)}</div><div style="margin-top:4px">${t.count > 1 ? `<span class="badge">${t.count} رسايل</span> ` : ''}${t.replied ? '<span class="badge">اترد عليها</span>' : ''}</div></a>`).join('') : '<div class="empty">مفيش رسايل لسه.<br>أول ما حد يبعتلك هتظهر هنا.</div>'}`,
-    `<a class="btn sm" href="#/settings/invite">+ ادعُ أصحابك</a> <a class="btn sm ghost" href="#/settings">الإعدادات</a> <button class="btn sm ghost" id="out">خروج</button>`);
-  $('#out').onclick = async () => { await api('/logout', 'POST'); location.hash = '#/'; location.reload(); };
+  ${threads.length ? `<div class="sect"><b>الرسايل</b><span class="badge new">${nf(threads.length)}</span></div>` + threads.map(t => `<a class="thread ${t.unread ? 'unread' : ''}" href="#/inbox/${t.id}"><span class="tav">${t.starred ? '★' : '؟'}</span><div class="tc"><div class="t"><b>مجهول</b><span class="mut">${time(t.last.t)}</span></div><div class="m mut">${t.last.from === 'owner' ? 'أنت: ' : ''}${esc(t.last.text)}</div><div class="tb">${t.unread ? '<span class="badge new">جديدة</span>' : ''}${t.count > 1 ? `<span class="badge">${nf(t.count)} رسايل</span>` : ''}${t.replied ? '<span class="badge soft">اترد عليها</span>' : ''}</div></div></a>`).join('') : '<div class="empty">مفيش رسايل لسه.<br>أول ما حد يبعتلك هتظهر هنا.</div>'}`,
+    `<a class="btn sm" href="#/settings/invite">+ ادعُ أصحابك</a>${userMenu(u)}`);
   const sig = JSON.stringify(threads.map(t => [t.id, t.count, t.unread, t.starred, t.replied]));
   timer = setInterval(async () => { try { if (location.hash !== '#/inbox') return; const r = await api('/inbox'); if (JSON.stringify(r.threads.map(t => [t.id, t.count, t.unread, t.starred, t.replied])) !== sig) pageInbox(); } catch (e) {} }, 15000);
   document.querySelectorAll('a.thread').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); location.hash = a.getAttribute('href'); }));
@@ -142,7 +172,7 @@ async function pageInbox() {
 async function pageThread(id) {
   const t = await api('/inbox/' + id), u0 = await api('/me');
   app.innerHTML = shell(`<div class="card"><div class="row" style="justify-content:space-between;margin-bottom:6px"><a href="#/inbox" class="mut">→ الرسايل</a><span class="row"><button class="btn sm ghost" id="shr">📷 صورة</button><button class="btn sm ghost" id="st">${t.starred ? '⭐ مفضلة' : '☆ تفضيل'}</button><button class="btn sm ghost" id="rp">إبلاغ</button><button class="btn sm ghost" id="bl">حظر</button><button class="btn sm ghost" id="dl">حذف</button></span></div>${bubbles(t.msgs, true, u0.name, u0.avatar)}
-  <form class="composer" id="f"><textarea id="tx" maxlength="1000" placeholder="اكتب ردك..."></textarea><button class="send" aria-label="إرسال">${plane}</button></form>${brandline()}</div>`);
+  <form class="composer" id="f"><textarea id="tx" maxlength="1000" placeholder="اكتب ردك..."></textarea><button class="send" aria-label="إرسال">${plane}</button></form>${brandline()}</div>`, userMenu(u0));
   $('#f').onsubmit = async e => { e.preventDefault(); if (!$('#tx').value.trim()) return; await api(`/inbox/${id}/reply`, 'POST', { text: $('#tx').value }); pageThread(id); };
   $('#shr').onclick = () => shareDialog(t.msgs, u0.name, true);
   $('#st').onclick = async () => { await api(`/inbox/${id}/star`, 'POST'); pageThread(id); };
@@ -164,7 +194,7 @@ async function pageSettings() {
   <label class="row" style="margin-bottom:12px"><input type="checkbox" id="o2" ${n.onFollowup !== false ? 'checked' : ''} style="width:auto;margin:0"> أنبهني لما المرسل يكتب رد</label>
   <p class="err" id="ner"></p><div class="row"><button class="btn">حفظ الإشعارات</button><button type="button" class="btn ghost" id="tst">إشعار تجريبي</button></div></form><p class="mut" id="nok" style="margin:8px 0 0"></p>
   <p style="margin:12px 0 0"><a class="mut" href="#/outbox">شوف الرسايل اللي اتجهزت (للتجربة المحلية)</a></p></div>
-  <div class="card"><h1 style="font-size:20px">تغيير كلمة السر</h1><form id="pf"><input id="po" type="password" dir="ltr" placeholder="كلمة السر الحالية"><input id="pn" type="password" dir="ltr" placeholder="كلمة السر الجديدة"><p class="err" id="per"></p><button class="btn full ghost">تغيير</button></form></div><a href="#/inbox" class="mut">→ رجوع</a>`);
+  <div class="card"><h1 style="font-size:20px">تغيير كلمة السر</h1><form id="pf"><input id="po" type="password" dir="ltr" placeholder="كلمة السر الحالية"><input id="pn" type="password" dir="ltr" placeholder="كلمة السر الجديدة"><p class="err" id="per"></p><button class="btn full ghost">تغيير</button></form></div><a href="#/inbox" class="mut">→ رجوع</a>`, userMenu(u));
   const pend = {};
   const shrink = (file, w, h) => new Promise(ok => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'), r = Math.max(w / im.width, h / im.height); g.drawImage(im, (w - im.width * r) / 2, (h - im.height * r) / 2, im.width * r, im.height * r); ok(c.toDataURL('image/jpeg', .82)); }; im.src = URL.createObjectURL(file); });
   $('#af').onchange = async e => { if (e.target.files[0]) { pend.avatar = await shrink(e.target.files[0], 256, 256); const el = document.querySelector('.av.big'); el.outerHTML = `<img class="av big" src="${pend.avatar}">`; } };

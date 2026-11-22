@@ -107,7 +107,7 @@ async function api(req, res, url) {
   if (p === '/api/invite' && m === 'GET') {
     if (!u) return send(res, 401, { error: 'auth' });
     if (!u.invite) { do { u.invite = rid(6); } while (Object.values(db.users).some(q => q !== u && q.invite === u.invite)); save(); }
-    return send(res, 200, { code: u.invite, count: Object.values(db.users).filter(q => q.invitedBy === u.username).length });
+    return send(res, 200, { code: u.invite, count: Object.values(db.users).filter(q => q.invitedBy === u.username).length, visits: u.inviteVisits || 0 });
   }
   if ((r = p.match(/^\/api\/invite\/([A-Za-z0-9_-]{4,16})$/)) && m === 'GET') {
     if (limited('iv' + ip(req), 30, 600e3)) return send(res, 429, { error: 'محاولات كتير' });

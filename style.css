@@ -151,3 +151,39 @@ a:focus-visible,button:focus-visible,input:focus-visible,textarea:focus-visible,
 textarea{resize:none}
 .top{flex-wrap:wrap;gap:8px}
 .top .row{flex-wrap:wrap;justify-content:flex-end}
+
+/* ===== v10: inbox thread cards ===== */
+.sect{display:flex;align-items:center;gap:8px;margin:18px 2px 10px;font-size:17px}
+.thread{display:flex;gap:12px;align-items:flex-start;padding:14px;border:1px solid var(--line);border-radius:18px;background:var(--card);margin-bottom:10px;box-shadow:0 2px 10px var(--shadow)}
+.thread .tav{width:44px;height:44px;border-radius:50%;background:#3a312c;color:#cfc5bd;display:flex;align-items:center;justify-content:center;font-weight:800;font-size:19px;flex:none;margin-top:2px}
+[data-theme=light] .thread .tav{background:#f0e3d8;color:#a08060}
+.thread .tc{flex:1;min-width:0}
+.thread .t{display:flex;justify-content:space-between;gap:8px;align-items:baseline}
+.thread .t b{font-size:15.5px}
+.thread .t .mut{font-size:11.5px;flex:none}
+.thread .m{margin-top:2px;font-size:14px;line-height:1.55}
+.thread .tb{display:flex;gap:6px;flex-wrap:wrap;margin-top:8px}
+.thread .tb:empty{margin-top:0}
+.thread .badge{font-size:11.5px;padding:2px 10px}
+.thread .badge.new{background:linear-gradient(135deg,var(--p),var(--p2));color:#fff}
+.thread .badge.soft{background:var(--soft);color:var(--mut)}
+.thread.unread{background:linear-gradient(90deg,rgba(224,85,59,.07),transparent 55%),var(--card)}
+
+/* ===== v10: avatar menu + invitations panel ===== */
+.umenu{position:relative}
+.uav{width:40px;height:40px;border-radius:50%;border:2px solid var(--line);background:linear-gradient(135deg,var(--p),var(--p2));color:#fff;font-weight:800;font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;overflow:hidden;padding:0;font-family:inherit}
+.uav img{width:100%;height:100%;object-fit:cover;display:block}
+.udrop{position:absolute;top:calc(100% + 10px);inset-inline-end:0;min-width:235px;background:var(--card);border:1px solid var(--line);border-radius:16px;box-shadow:0 14px 36px var(--shadow);padding:8px;z-index:20}
+.uhead{display:flex;align-items:center;gap:10px;padding:8px 8px 12px;border-bottom:1px solid var(--line);margin-bottom:6px}
+.uhead .av{width:38px;height:38px;font-size:16px;flex:none}
+.uhi{display:flex;flex-direction:column;line-height:1.35;text-align:start;min-width:0}
+.uhi b{font-size:14.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.uhi .mut{font-size:12px}
+.uit{display:flex;align-items:center;gap:10px;width:100%;padding:10px 8px;border:0;background:none;color:var(--ink);font:inherit;font-size:14.5px;border-radius:10px;cursor:pointer;text-decoration:none;text-align:start;box-sizing:border-box}
+.uit:hover{background:var(--soft)}
+.uit svg{flex:none;color:var(--mut)}
+.uit.danger,.uit.danger svg{color:#d03050}
+.istats{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:12px 0}
+.istats>div{background:var(--soft);border-radius:14px;padding:12px;text-align:center}
+.istats b{display:block;font-size:22px;color:var(--p)}
+.istats span{font-size:12.5px;color:var(--mut)}
