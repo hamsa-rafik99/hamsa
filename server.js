@@ -115,7 +115,13 @@ async function api(req, res, url) {
     return x ? send(res, 200, { name: x.name }) : send(res, 404, { error: 'لينك الدعوة مش صحيح' });
   }
   if (p === '/api/logout' && m === 'POST') { delete db.sessions[sha(cookie(req).sid || '')]; save(); return send(res, 200, { ok: 1 }, { 'Set-Cookie': `sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${HTTPS ? '; Secure' : ''}` }); }
-  if (p === '/api/me') return u ? send(res, 200, { ...pub(u), open: u.open, email: u.email || '' }) : send(res, 401, { error: 'auth' });
+  if (p === '/api/me') return u ? send(res, 200, { ...pub(u), open: u.open, email: u.email || '', ogimg: !!u.ogimg }) : send(res, 401, { error: 'auth' });
+  if (p === '/api/og-image' && m === 'POST') {
+    if (!u) return send(res, 401, { error: 'auth' });
+    const img = String(b.img || '');
+    if (!/^data:image\/(jpeg|png);base64,[A-Za-z0-9+/=]+$/.test(img) || img.length > 400000) return send(res, 400, { error: 'الصورة مش مظبوطة' });
+    u.ogimg = img; save(); return send(res, 200, { ok: 1 });
+  }
   if (p === '/api/forgot' && m === 'POST') {
     const id = clean(b.id, 100).toLowerCase();
     if (limited('fg' + ip(req), 5, 3600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
@@ -216,6 +222,9 @@ function login(res, un) { admin.bump('logins'); if (db.users[un]) db.users[un].l
 
 const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css', '.js': 'text/javascript', '.svg': 'image/svg+xml', '.png': 'image/png', '.txt': 'text/plain; charset=utf-8' };
 const escHtml = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const { ogSvg } = require('./ogcard');
+let sharp = null; try { sharp = require('sharp'); } catch { /* optional dep: og image falls back to stored/static */ }
+const ogCache = new Map(); // handle -> {t, buf} (60s)
 // SEO / AI-SEO: index.html is a template; these routes serve crawlers and chat agents.
 function renderIndex() {
   const SNAME = db.settings.siteName || SITE_NAME;
@@ -226,6 +235,21 @@ function renderIndex() {
 }
 const llms = () => `# ${db.settings.siteName || SITE_NAME}\n\n> Anonymous messaging in Arabic (RTL): create a page, share your link, receive anonymous messages and reply in a chat-style thread. Senders stay anonymous and follow replies with a private code. Free.\n\n## Pages\n- ${BASE}/ : landing page (Arabic)\n- ${BASE}/#/signup and ${BASE}/#/login : account creation and sign-in\n- ${BASE}/#/u/{username} : public page to send an anonymous message to that user\n- ${BASE}/#/t/{CODE} : sender follows replies using the private code\n- ${BASE}/#/inbox : owner's inbox (requires sign-in)\n- ${BASE}/#/settings : profile, notifications, invite link\n\n## Notes\n- Hash-based single-page app: routes live after '#'.\n- Messages are private. The admin dashboard shows metadata only; message text is visible only for reported threads.\n- API endpoints under /api/ are for the app, not public data.\n`;
 const manifest = () => JSON.stringify({ name: (db.settings.siteName || SITE_NAME) + ' — رسايل مجهولة', short_name: db.settings.siteName || SITE_NAME, start_url: '/', display: 'standalone', dir: 'rtl', lang: 'ar', background_color: '#171210', theme_color: '#e0553b', icons: [{ src: '/icon-192.png', sizes: '192x192', type: 'image/png' }, { src: '/icon-512.png', sizes: '512x512', type: 'image/png' }] });
+// Server-rendered profile page: crawlers (WhatsApp, Facebook, X...) read the OG/Twitter tags from the HTML;
+// real browsers get redirected to the SPA hash route. Old /#/u/... links keep working in the app.
+function profilePage(handle) {
+  const S = db.settings.siteName || SITE_NAME, u = db.users[handle];
+  const name = u ? (u.name || handle) : handle;
+  const title = u ? `صارح ${name} وتابع الردود في ${S}` : `${S} — رسايل مجهولة`;
+  const desc = u ? `ابعت رسالة مجهولة لـ ${name} — من غير اسم ولا حساب — وهو يرد عليك وانت متابع من نفس اللينك.` : 'منصة عربية للرسائل المجهولة: شارك رابطك واستقبل رسايل بدون أسماء ورد عليها.';
+  const img = u && u.ogimg ? `${BASE}/og/u/${handle}` : `${BASE}/og.png`;
+  const page = `${BASE}/u/${handle}`, spa = `/#/u/${handle}`;
+  const m = (k, v, p) => `<meta ${p ? 'property' : 'name'}="${k}" content="${escHtml(v)}">`;
+  return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escHtml(title)}</title>
+${m('description', desc)}${m('og:type', 'profile', 1)}${m('og:site_name', S, 1)}${m('og:title', title, 1)}${m('og:description', desc, 1)}${m('og:url', page, 1)}${m('og:image', img, 1)}${m('og:image:width', '1200', 1)}${m('og:image:height', '630', 1)}${m('og:locale', 'ar_AR', 1)}${m('twitter:card', 'summary_large_image')}${m('twitter:title', title)}${m('twitter:description', desc)}${m('twitter:image', img)}
+<meta http-equiv="refresh" content="0;url=${escHtml(spa)}"><link rel="icon" href="/favicon.svg" type="image/svg+xml"></head>
+<body style="font-family:Tahoma,sans-serif;text-align:center;padding:40px 16px"><p><a href="${escHtml(spa)}">${escHtml(title)}</a></p></body></html>`;
+}
 const server = http.createServer(async (req, res) => {
   metrics.requests++;
   try {
@@ -244,6 +268,36 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/sitemap.xml') { res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${BASE}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url></urlset>`); }
     if (url.pathname === '/llms.txt') { res.writeHead(200, { 'Content-Type': types['.txt'], 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : llms()); }
     if (url.pathname === '/manifest.webmanifest') { res.writeHead(200, { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : manifest()); }
+    let rm;
+    if ((rm = url.pathname.match(/^\/u\/([a-z0-9_]{3,20})$/))) { res.writeHead(200, { 'Content-Type': types['.html'], 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : profilePage(rm[1])); }
+    if ((rm = url.pathname.match(/^\/og\/u\/([a-z0-9_]{3,20})$/))) {
+      const u = db.users[rm[1]];
+      if (u && sharp) {
+        try {
+          let c = ogCache.get(rm[1]);
+          if (!c || Date.now() - c.t > 60000) {
+            c = { t: Date.now(), buf: await sharp(Buffer.from(ogSvg({ username: u.username, name: u.name, avatar: u.avatar || '', stats: stats(u.username), views: u.views || 0, since: u.created }))).png().toBuffer() };
+            ogCache.set(rm[1], c);
+          }
+          res.writeHead(200, { 'Content-Type': 'image/png', 'Content-Length': c.buf.length, 'Cache-Control': 'public, max-age=60', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : c.buf);
+        } catch (e) { /* fall through to stored/static fallback */ }
+      }
+      if (u && u.ogimg) {
+        const ci = u.ogimg.indexOf(','), mime = u.ogimg.slice(5, u.ogimg.indexOf(';'));
+        const buf = Buffer.from(u.ogimg.slice(ci + 1), 'base64');
+        res.writeHead(200, { 'Content-Type': mime, 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=300', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : buf);
+      }
+      res.writeHead(302, { Location: '/og.png', ...SEC }); return res.end();
+    }
+    if ((rm = url.pathname.match(/^\/avatar\/([a-z0-9_]{3,20})$/))) {
+      const u = db.users[rm[1]];
+      if (u && u.avatar && u.avatar.startsWith('data:image/')) {
+        const ci = u.avatar.indexOf(','), mime = u.avatar.slice(5, u.avatar.indexOf(';'));
+        const buf = Buffer.from(u.avatar.slice(ci + 1), 'base64');
+        res.writeHead(200, { 'Content-Type': mime, 'Content-Length': buf.length, 'Cache-Control': 'public, max-age=300', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : buf);
+      }
+      res.writeHead(302, { Location: '/icon-512.png', ...SEC }); return res.end();
+    }
     const f = ['/app.js', '/style.css', '/admin-ui.js', '/favicon.svg', '/favicon.ico', '/og.png', '/icon-180.png', '/icon-192.png', '/icon-512.png'].includes(url.pathname) ? (url.pathname === '/favicon.ico' ? '/favicon.svg' : url.pathname) : '/index.html'; // fixed whitelist: no path traversal possible
     if (f === '/index.html') { const { html, csp } = renderIndex(); res.writeHead(200, { 'Content-Type': types['.html'], 'Cache-Control': 'no-cache', ...SEC, 'Content-Security-Policy': csp }); return res.end(req.method === 'HEAD' ? undefined : html); }
     const data = fs.readFileSync(path.join(PUB, f));

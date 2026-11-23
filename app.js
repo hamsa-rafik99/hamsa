@@ -58,6 +58,36 @@ const copyBtn = (id, text) => `<button class="btn sm ghost" data-act="copy" data
 const grow = t => { t.style.height = '46px'; const h = Math.min(t.scrollHeight, 120); t.style.height = h + 'px'; t.style.overflowY = t.scrollHeight > 120 ? 'auto' : 'hidden'; };
 document.addEventListener('input', e => { if (e.target.matches('.composer textarea')) grow(e.target); });
 
+// per-profile share banner (og:image): drawn on canvas here (perfect Arabic shaping), uploaded once, served at /og/u/<handle>
+async function drawBanner(u) {
+  const c = document.createElement('canvas'); c.width = 1200; c.height = 630; const g = c.getContext('2d'); g.direction = 'rtl';
+  g.fillStyle = '#171210'; g.fillRect(0, 0, 1200, 630);
+  const orb = (x, y, r, col) => { const rg = g.createRadialGradient(x, y, 0, x, y, r); rg.addColorStop(0, col); rg.addColorStop(1, 'rgba(224,85,59,0)'); g.fillStyle = rg; g.beginPath(); g.arc(x, y, r, 0, 7); g.fill(); };
+  orb(70, 30, 400, 'rgba(224,85,59,.5)'); orb(1130, 600, 440, 'rgba(255,138,76,.38)');
+  const grad = (x0, x1) => { const r = g.createLinearGradient(x0, 0, x1, 0); r.addColorStop(0, '#e0553b'); r.addColorStop(1, '#ff8a4c'); return r; };
+  g.textAlign = 'center';
+  g.fillStyle = grad(430, 770); g.font = 'bold 72px Tahoma,"Segoe UI",sans-serif';
+  g.fillText(SITE, 600, 105);
+  const ax = 600, ay = 245, ar = 100;
+  g.save(); g.beginPath(); g.arc(ax, ay, ar, 0, 7); g.clip();
+  if (u.avatar) {
+    const im = await new Promise((ok, no) => { const i = new Image(); i.onload = () => ok(i); i.onerror = no; i.src = u.avatar; });
+    const s = Math.max(2 * ar / im.width, 2 * ar / im.height);
+    g.drawImage(im, ax - im.width * s / 2, ay - im.height * s / 2, im.width * s, im.height * s);
+  } else {
+    g.fillStyle = '#3a312c'; g.fillRect(ax - ar, ay - ar, 2 * ar, 2 * ar);
+    g.fillStyle = '#cfc5bd'; g.font = 'bold 90px Tahoma,sans-serif'; g.fillText((u.name || '؟')[0], ax, ay + 32);
+  }
+  g.restore();
+  g.lineWidth = 6; g.strokeStyle = 'rgba(255,255,255,.92)'; g.beginPath(); g.arc(ax, ay, ar + 4, 0, 7); g.stroke();
+  g.fillStyle = '#f4ede7'; g.font = 'bold 62px Tahoma,"Segoe UI",sans-serif'; g.fillText(u.name || u.username, 600, 425);
+  g.fillStyle = 'rgba(244,237,231,.7)'; g.font = '38px Tahoma,sans-serif'; g.direction = 'ltr'; g.fillText('@' + u.username, 600, 482); g.direction = 'rtl';
+  g.fillStyle = grad(260, 940); g.font = 'bold 44px Tahoma,"Segoe UI",sans-serif';
+  g.fillText('صارحني من غير ما تقول مين انت', 600, 565);
+  return c.toDataURL('image/jpeg', .85);
+}
+async function genBanner(u) { try { const img = await drawBanner(u); await api('/og-image', 'POST', { img }); } catch {} }
+
 // long-press (or right-click) a bubble to peek at its time; tap anywhere else to hide
 let lpT;
 const showT = b => { document.querySelectorAll('.b.showt').forEach(x => x.classList.remove('showt')); b.classList.add('showt'); };
@@ -77,7 +107,7 @@ document.addEventListener('click', e => {
   if (b.dataset.act === 'theme') { localStorage.setItem('theme', theme() === 'dark' ? 'light' : 'dark'); document.documentElement.dataset.theme = theme(); document.querySelectorAll('.mlab').forEach(s => s.textContent = theme() === 'dark' ? 'الوضع الفاتح' : 'الوضع الداكن'); }
   if (b.dataset.act === 'out') api('/logout', 'POST').finally(() => { location.hash = '#/'; location.reload(); });
   if (b.dataset.act === 'inv') invitePanel();
-  if (b.dataset.act === 'share') navigator.share({ title: SITE, text: 'سجّل على ' + SITE + ' واستقبل رسايل مجهولة', url: b.dataset.text }).catch(() => {});
+  if (b.dataset.act === 'share') navigator.share({ title: SITE, text: b.dataset.stext || ('سجّل على ' + SITE + ' واستقبل رسايل مجهولة'), url: b.dataset.text }).catch(() => {});
   if (b.dataset.act === 'copy') { const done = () => { const l = b.querySelector('span'); (l || b).textContent = 'تم النسخ ✓'; b.classList.add('done'); }; (navigator.clipboard ? navigator.clipboard.writeText(b.dataset.text).then(done, done) : done()); }
 });
 
@@ -171,8 +201,10 @@ async function pageTrack(c) {
   timer = setInterval(async () => { if (document.activeElement && document.activeElement.id === 'tx' && $('#tx').value) return; try { const t = await api('/t/' + c); if (t.msgs.length !== seen) draw(); } catch {} }, 5000);
 }
 async function pageInbox() {
-  const u = await api('/me'), { threads } = await api('/inbox'), link = `${origin}/#/u/${u.username}`;
-  app.innerHTML = shell(`${profileHead(u, true)}<div class="card center"><p class="sub">شارك رابطك على ستوري أو بروفايلك واستقبل رسايل مجهولة</p>${bigCopy(link, 'نسخ اللينك')}</div>
+  const u = await api('/me'), { threads } = await api('/inbox'), link = `${origin}/u/${u.username}`;
+  if (!u.ogimg) genBanner(u);
+  const shareTxt = `صارحني من غير ما تقول مين انت: ابعتلي رسالة مجهولة على ${SITE} وهرد عليك، وهتتابع ردّي من نفس اللينك`;
+  app.innerHTML = shell(`${profileHead(u, true)}<div class="card center"><p class="sub">شارك رابطك على ستوري أو بروفايلك واستقبل رسايل مجهولة</p>${bigCopy(link, 'نسخ اللينك')}${navigator.share ? `<button class="btn full" data-act="share" data-text="${esc(link)}" data-stext="${esc(shareTxt)}" style="margin-top:10px">شارك لينكك</button>` : ''}</div>
   ${threads.length ? `<div class="sect"><b>الرسايل</b><span class="badge new">${nf(threads.length)}</span></div>` + threads.map(t => `<a class="thread ${t.unread ? 'unread' : ''}" href="#/inbox/${t.id}"><span class="tav">${t.starred ? '★' : '؟'}</span><div class="tc"><div class="t"><b>مجهول</b><span class="mut">${time(t.last.t)}</span></div><div class="m mut">${t.last.from === 'owner' ? 'أنت: ' : ''}${esc(t.last.text)}</div><div class="tb">${t.unread ? '<span class="badge new">جديدة</span>' : ''}${t.count > 1 ? `<span class="badge">${nf(t.count)} رسايل</span>` : ''}${t.replied ? '<span class="badge soft">اترد عليها</span>' : ''}</div></div></a>`).join('') : '<div class="empty">مفيش رسايل لسه.<br>أول ما حد يبعتلك هتظهر هنا.</div>'}`,
     `<a class="btn sm" href="#/settings/invite">+ ادعُ أصحابك</a>${userMenu(u)}`);
   const sig = JSON.stringify(threads.map(t => [t.id, t.count, t.unread, t.starred, t.replied]));
@@ -210,7 +242,7 @@ async function pageSettings() {
   $('#af').onchange = async e => { if (e.target.files[0]) { pend.avatar = await shrink(e.target.files[0], 256, 256); const el = document.querySelector('.av.big'); el.outerHTML = `<img class="av big" src="${pend.avatar}">`; } };
   $('#cf').onchange = async e => { if (e.target.files[0]) { pend.cover = await shrink(e.target.files[0], 900, 300); $('#cv').style.backgroundImage = `url(${pend.cover})`; } };
   $('#rm').onclick = () => { pend.avatar = ''; pend.cover = ''; $('#cv').style.backgroundImage = ''; };
-  $('#f').onsubmit = async e => { e.preventDefault(); await api('/profile', 'POST', { name: $('#nm').value, bio: $('#bio').value, open: $('#op').checked, ...pend }); location.hash = '#/inbox'; };
+  $('#f').onsubmit = async e => { e.preventDefault(); await api('/profile', 'POST', { name: $('#nm').value, bio: $('#bio').value, open: $('#op').checked, ...pend }); genBanner({ username: u.username, name: $('#nm').value, avatar: pend.avatar !== undefined ? pend.avatar : u.avatar }); location.hash = '#/inbox'; };
   const saveN = () => api('/notify', 'POST', { email: $('#ne').value, nEmail: $('#nen').checked, telegram: $('#nt').value, whatsapp: $('#nw').value, onMessage: $('#o1').checked, onFollowup: $('#o2').checked });
   try { const iv = await api('/invite'), link = `${origin}/#/join/${iv.code}`;
     app.querySelector('.wrap .card').insertAdjacentHTML('afterend', `<div class="card center invite"><h1 style="font-size:20px">ادعُ أصحابك</h1><p class="sub">شارك لينكك الخاص. كل واحد يسجل منه بيتسجل إنه جه من عندك (${iv.count} لحد دلوقتي).</p><div class="invlink" dir="ltr">${esc(link)}</div><button class="copybtn" data-act="copy" data-text="${esc(link)}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>نسخ اللينك</span></button>${navigator.share ? `<button class="btn full" data-act="share" data-text="${esc(link)}" style="margin-top:10px">مشاركة اللينك</button>` : ''}</div>`); } catch {}
