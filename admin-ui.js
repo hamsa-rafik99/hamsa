@@ -83,7 +83,7 @@ async function adminUsers() {
         <div class="row"><button class="btn sm ghost" data-u="${esc(u.username)}" data-do="${u.banned ? 'unban' : 'ban'}">${u.banned ? 'رفع الإيقاف' : 'إيقاف'}</button><button class="btn sm ghost" data-u="${esc(u.username)}" data-do="delete">حذف</button></div></div>`).join('') : '<div class="empty">مفيش نتايج</div>';
     };
     let tm; $('#aq').oninput = () => { clearTimeout(tm); tm = setTimeout(load, 250); }; $('#as').onchange = $('#ast').onchange = load;
-    $('#ul').onclick = async e => { const b = e.target.closest('[data-do]'); if (!b) return; const a = b.dataset.do; if (a === 'delete' && !confirm('حذف الحساب وكل رسايله نهائياً؟')) return; if (a === 'ban' && !confirm('إيقاف الحساب؟')) return; await aapi(`/users/${b.dataset.u}/${a}`, 'POST'); load(); };
+    $('#ul').onclick = async e => { const b = e.target.closest('[data-do]'); if (!b) return; const a = b.dataset.do; if (a === 'delete' && !await askConfirm('حذف الحساب وكل رسايله نهائياً؟')) return; if (a === 'ban' && !confirm('إيقاف الحساب؟')) return; await aapi(`/users/${b.dataset.u}/${a}`, 'POST'); load(); };
     $('#csv').onclick = () => { const safe = v => { v = String(v); return '"' + (/^[=+\-@]/.test(v) ? "'" + v : v).replace(/"/g, '""') + '"'; }; const csv = ['username,name,email,joined,last_login,messages,replies,views,banned'].concat(rows.map(u => [u.username, u.name, u.email, day(u.created), u.last ? day(u.last) : '', u.received, u.replies, u.views, u.banned].map(safe).join(','))).join('\n'); const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv' })); a.download = 'users.csv'; a.click(); };
     load();
   } };
