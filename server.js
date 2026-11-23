@@ -41,7 +41,7 @@ const me = req => { const sid = cookie(req).sid, s = sid && db.sessions[sha(sid)
 const clean = (t, max) => String(t || '').replace(/\s+\n/g, '\n').trim().slice(0, max);
 const img = v => typeof v === 'string' && v.length < 260000 && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(v);
 const stats = un => { let got = 0, rep = 0, th = 0; for (const t of Object.values(db.threads)) if (t.to === un) { th++; got += t.msgs.filter(m => m.from === 'anon').length; rep += t.msgs.filter(m => m.from === 'owner').length; } return { received: got, replies: rep, threads: th }; };
-const pub = u => ({ username: u.username, name: u.name, bio: u.bio, avatar: u.avatar || '', cover: u.cover || '', since: u.created || 0, views: u.views || 0, stats: stats(u.username) });
+const pub = u => ({ username: u.username, name: u.name, bio: u.bio, avatar: u.avatar || '', cover: u.cover || '', covery: u.covery ?? 50, since: u.created || 0, views: u.views || 0, stats: stats(u.username) });
 // Real client address behind Render/Cloudflare. Used ONLY for rate limits and the hidden block fingerprint, never stored in the clear.
 let admin; // created in boot() after the database is loaded
 const ip = req => String(req.headers['cf-connecting-ip'] || (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress);
@@ -164,6 +164,7 @@ async function api(req, res, url) {
   if (p === '/api/profile' && m === 'POST') {
     if (!u) return send(res, 401, { error: 'auth' });
     u.name = clean(b.name, 40) || u.username; u.bio = clean(b.bio, 200); u.open = b.open !== false;
+    if (b.covery !== undefined) { const y = Number(b.covery); if (isFinite(y)) u.covery = Math.max(0, Math.min(100, Math.round(y))); }
     for (const k of ['avatar', 'cover']) { if (b[k] === '') delete u[k]; else if (b[k] !== undefined) { if (!img(b[k])) return send(res, 400, { error: 'الصورة لازم تكون JPG أو PNG وحجمها أقل من 250KB' }); u[k] = b[k]; } }
     save();
     return send(res, 200, pub(u));

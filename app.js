@@ -49,9 +49,9 @@ const brandline = () => `<div class="brandline">من <b>${esc(SITE)}</b> · رس
 const av = (u, cls = '') => u.avatar ? `<img class="av ${cls}" src="${u.avatar}" alt="${esc(u.name || '')}">` : `<div class="av ${cls}">${esc((u.name || '?')[0])}</div>`;
 const nf = n => Number(n).toLocaleString('ar-EG');
 const since = t => t ? new Date(t).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' }) : '—';
-const profileHead = (u, owner) => `<div class="pcard"><div class="cover ${u.cover ? '' : 'nocover'}" ${u.cover ? `style="background-image:url(${u.cover})"` : ''}></div><div class="pbody">${av(u, 'big')}<h1>${esc(u.name)}</h1><div class="handle">@${esc(u.username)}</div>
-  <div class="stats" style="grid-template-columns:repeat(${owner ? 4 : 3},1fr)"><div><b>${nf(u.stats.received)}</b><span>رسالة</span></div><div><b>${nf(u.stats.replies)}</b><span>رد</span></div>${owner ? `<div><b>${nf(u.views)}</b><span>زيارة</span></div>` : ''}<div><b>${since(u.since)}</b><span>انضم</span></div></div>
-  ${owner && u.bio ? `<p class="bio">${esc(u.bio)}</p>` : ''}</div></div>`;
+const profileHead = (u, owner) => `<div class="pcard"><div class="cover ${u.cover ? '' : 'nocover'}" ${u.cover ? `style="background-image:url(${u.cover});background-position:center ${u.covery ?? 50}%"` : ''}></div><div class="pbody">${av(u, 'big')}<h1>${esc(u.name)}</h1><div class="handle">@${esc(u.username)}</div>
+  ${u.bio ? `<p class="bio">${esc(u.bio)}</p>` : ''}
+  <div class="stats" style="grid-template-columns:repeat(${owner ? 4 : 3},1fr)"><div><b>${nf(u.stats.received)}</b><span>رسالة</span></div><div><b>${nf(u.stats.replies)}</b><span>رد</span></div>${owner ? `<div><b>${nf(u.views)}</b><span>زيارة</span></div>` : ''}<div><b>${since(u.since)}</b><span>انضم</span></div></div></div></div>`;
 const bigCopy = (text, label) => `<div class="invlink" dir="ltr">${esc(text)}</div><button class="copybtn" data-act="copy" data-text="${esc(text)}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>${label}</span></button>`;
 const copyBtn = (id, text) => `<button class="btn sm ghost" data-act="copy" data-text="${esc(text)}">نسخ</button>`;
 // auto-growing composer textarea
@@ -173,7 +173,7 @@ async function pageAuth(signupFirst) {
 async function pageSend(un) {
   const u = await api('/u/' + un);
   app.innerHTML = shell(`${profileHead(u, false)}<div class="card msgcard">
-  <div class="quote"><i>”</i>${esc(u.bio || 'همسة صغيرة من القلب... واسمك في أمان، مش هيظهر لحد.')}</div>
+  ${u.bio ? '' : `<div class="quote"><i>”</i>همسة صغيرة من القلب... واسمك في أمان، مش هيظهر لحد.</div>`}
   ${u.open ? `<div class="chips">${['رأيك الصريح', 'عندي سؤال', 'نصيحة', 'كلمة مؤجلة'].map(t => `<button type="button" class="chip">${t}</button>`).join('')}</div><form id="f"><textarea id="tx" maxlength="500" placeholder="اكتب رسالتك هنا..." style="min-height:140px"></textarea><div class="counter"><span>الرسالة مجهولة</span><span id="cnt">0/500</span></div><p class="err" id="er"></p><button class="btn full">إرسال بشكل مجهول</button></form>` : `<p class="mut">صاحب الصفحة قافل استقبال الرسايل دلوقتي.</p>`}</div>
   <div class="center mut"><a href="#/follow" class="mut">عندك كود؟ تابع الردود</a> · <a href="#/" class="mut">اعمل صفحتك</a></div>`);
   const tx0 = $('#tx'); if (tx0) { tx0.oninput = () => $('#cnt').textContent = tx0.value.length + '/500'; document.querySelectorAll('.chip').forEach(b => b.onclick = () => { document.querySelectorAll('.chip').forEach(x => x.classList.remove('on')); b.classList.add('on'); if (!tx0.value.trim() || /^\[.*\] /.test(tx0.value)) tx0.value = `[${b.textContent}] `; tx0.focus(); tx0.oninput(); }); }
@@ -226,7 +226,7 @@ async function pageThread(id) {
 async function pageSettings() {
   const u = await api('/me'), n = await api('/notify');
   const ch = (id, label, val, ph, live, need) => `<div class="chan"><b>${label}</b> <span class="badge">${live ? 'جاهز للإرسال الفعلي' : 'تجريبي محلي'}</span><input id="${id}" dir="ltr" value="${esc(val)}" placeholder="${ph}"><p class="mut" style="margin:-4px 0 4px;font-size:12px">${need}</p></div>`;
-  app.innerHTML = shell(`<div class="card"><h1>الملف الشخصي</h1><form id="f"><div class="edit-cover" id="cv" ${u.cover ? `style="background-image:url(${u.cover})"` : ''}><label class="btn sm ghost">غلاف<input type="file" id="cf" accept="image/*" hidden></label></div><div class="row" style="align-items:center;margin:-34px 14px 10px">${av(u, 'big')}<label class="btn sm ghost" style="margin-top:34px">صورة شخصية<input type="file" id="af" accept="image/*" hidden></label><button type="button" class="btn sm ghost" id="rm" style="margin-top:34px">إزالة الصور</button></div><input id="nm" value="${esc(u.name)}" placeholder="الاسم"><textarea id="bio" maxlength="200" placeholder="نبذة عنك (٢٠٠ حرف)" style="min-height:80px">${esc(u.bio)}</textarea><label class="row" style="margin-bottom:12px"><input type="checkbox" id="op" ${u.open ? 'checked' : ''} style="width:auto;margin:0"> استقبل رسايل جديدة</label><button class="btn full">حفظ الملف</button></form></div>
+  app.innerHTML = shell(`<div class="card"><h1>الملف الشخصي</h1><form id="f"><div class="edit-cover" id="cv" ${u.cover ? `style="background-image:url(${u.cover});background-position:center ${u.covery ?? 50}%"` : ''}><div class="cvbar"><button type="button" class="btn sm ghost" id="rp" ${u.cover ? '' : 'disabled'}>تحديد الجزء الظاهر</button><label class="btn sm ghost">تغيير الغلاف<input type="file" id="cf" accept="image/*" hidden></label></div><div class="cvhint">اسحب الصورة لتحديد الجزء اللي يظهر</div><div class="cvact"><button type="button" class="btn sm" id="rok">حفظ التحديد</button><button type="button" class="btn sm ghost" id="rno">إلغاء</button></div></div><div class="row" style="align-items:center;margin:-34px 14px 10px">${av(u, 'big')}<label class="btn sm ghost" style="margin-top:34px">صورة شخصية<input type="file" id="af" accept="image/*" hidden></label><button type="button" class="btn sm ghost" id="rm" style="margin-top:34px">إزالة الصور</button></div><input id="nm" value="${esc(u.name)}" placeholder="الاسم"><textarea id="bio" maxlength="200" placeholder="نبذة عنك (٢٠٠ حرف)" style="min-height:80px">${esc(u.bio)}</textarea><label class="row" style="margin-bottom:12px"><input type="checkbox" id="op" ${u.open ? 'checked' : ''} style="width:auto;margin:0"> استقبل رسايل جديدة</label><button class="btn full">حفظ الملف</button></form></div>
   <div class="card"><h1 style="font-size:20px">الإشعارات</h1><p class="sub">هنبعتلك تنبيه لما توصلك رسالة أو رد جديد (من غير ما نكتب نص الرسالة، بس لينك).</p><form id="nf">
   ${ch('ne', 'إيميل / Gmail', n.email, 'name@gmail.com', n.live.email, 'يحتاج مفتاح خدمة إرسال إيميل (Resend أو SMTP) ودومين مُرسِل')}
   <label class="row" style="margin:-2px 0 12px"><input type="checkbox" id="nen" ${n.nEmail ? 'checked' : ''} style="width:auto;margin:0"> فعّل إشعارات الإيميل</label>
@@ -240,8 +240,19 @@ async function pageSettings() {
   const pend = {};
   const shrink = (file, w, h) => new Promise(ok => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'), r = Math.max(w / im.width, h / im.height); g.drawImage(im, (w - im.width * r) / 2, (h - im.height * r) / 2, im.width * r, im.height * r); ok(c.toDataURL('image/jpeg', .82)); }; im.src = URL.createObjectURL(file); });
   $('#af').onchange = async e => { if (e.target.files[0]) { pend.avatar = await shrink(e.target.files[0], 256, 256); const el = document.querySelector('.av.big'); el.outerHTML = `<img class="av big" src="${pend.avatar}">`; } };
-  $('#cf').onchange = async e => { if (e.target.files[0]) { pend.cover = await shrink(e.target.files[0], 900, 300); $('#cv').style.backgroundImage = `url(${pend.cover})`; } };
-  $('#rm').onclick = () => { pend.avatar = ''; pend.cover = ''; $('#cv').style.backgroundImage = ''; };
+  const shrinkCover = file => new Promise(ok => { const im = new Image(); im.onload = () => { let w = Math.min(im.width, 900), h = Math.round(w * im.height / im.width); if (h > 675) { h = 675; w = Math.round(h * im.width / im.height); } const c = document.createElement('canvas'); c.width = w; c.height = h; c.getContext('2d').drawImage(im, 0, 0, w, h); ok(c.toDataURL('image/jpeg', .82)); }; im.src = URL.createObjectURL(file); });
+  let posY = u.covery ?? 50; const cvEl = $('#cv');
+  const setPos = y => { posY = Math.max(0, Math.min(100, y)); cvEl.style.backgroundPosition = `center ${posY}%`; };
+  $('#cf').onchange = async e => { if (e.target.files[0]) { pend.cover = await shrinkCover(e.target.files[0]); cvEl.style.backgroundImage = `url(${pend.cover})`; pend.covery = 50; setPos(50); $('#rp').disabled = false; } };
+  $('#rp').onclick = () => cvEl.classList.add('repos');
+  $('#rok').onclick = () => { pend.covery = posY; cvEl.classList.remove('repos'); };
+  $('#rno').onclick = () => { setPos(pend.covery ?? u.covery ?? 50); cvEl.classList.remove('repos'); };
+  let cvDrag = null;
+  cvEl.addEventListener('pointerdown', e => { if (!cvEl.classList.contains('repos')) return; cvDrag = { y: e.clientY, p: posY }; cvEl.setPointerCapture(e.pointerId); e.preventDefault(); });
+  cvEl.addEventListener('pointermove', e => { if (!cvDrag) return; setPos(cvDrag.p - (e.clientY - cvDrag.y) / cvEl.getBoundingClientRect().height * 100); });
+  cvEl.addEventListener('pointerup', () => cvDrag = null);
+  cvEl.addEventListener('pointercancel', () => cvDrag = null);
+  $('#rm').onclick = () => { pend.avatar = ''; pend.cover = ''; pend.covery = 50; $('#cv').style.backgroundImage = ''; setPos(50); $('#rp').disabled = true; };
   $('#f').onsubmit = async e => { e.preventDefault(); await api('/profile', 'POST', { name: $('#nm').value, bio: $('#bio').value, open: $('#op').checked, ...pend }); genBanner({ username: u.username, name: $('#nm').value, avatar: pend.avatar !== undefined ? pend.avatar : u.avatar }); location.hash = '#/inbox'; };
   const saveN = () => api('/notify', 'POST', { email: $('#ne').value, nEmail: $('#nen').checked, telegram: $('#nt').value, whatsapp: $('#nw').value, onMessage: $('#o1').checked, onFollowup: $('#o2').checked });
   try { const iv = await api('/invite'), link = `${origin}/#/join/${iv.code}`;
