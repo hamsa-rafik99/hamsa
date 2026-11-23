@@ -1,12 +1,12 @@
 // Authenticated, expiring stories. Media stays in a private object bucket.
 module.exports = function stories(ctx) {
  const {db,send,me,save,limited,ip,rid,SEC}=ctx, DAY=864e5, BUCKET='hamsa-stories';
- const url=(process.env.SUPABASE_URL||'').trim().replace(/\/$/,''),key=(process.env.SUPABASE_SERVICE_KEY||'').trim();
+ const url=(process.env.SUPABASE_URL||'').replace(/\s+/g,'').replace(/\/$/,''),key=(process.env.SUPABASE_SERVICE_KEY||'').replace(/\s+/g,'');
  db.stories=db.stories||{};
  const headers=()=>({apikey:key,...(key.startsWith('sb_')?{}:{Authorization:'Bearer '+key})});
  const objects=new Map(); // local tests only, never enabled in production
  const local=process.env.STORY_TEST_STORAGE==='1'&&!url;
- async function put(id,buf){if(local){objects.set(id,buf);return}if(!url||!key)throw Error('storage unavailable');const r=await fetch(url+'/storage/v1/object/'+BUCKET+'/'+id+'.webp',{method:'POST',headers:{...headers(),'Content-Type':'image/webp','Cache-Control':'no-store'},body:buf});if(!r.ok)throw Error('storage upload failed '+r.status)}
+ async function put(id,buf){if(local){objects.set(id,buf);return}if(!url||!key)throw Error('storage unavailable');const r=await fetch(url+'/storage/v1/object/'+BUCKET+'/'+id+'.webp',{method:'POST',headers:{...headers(),'Content-Type':'image/webp','Cache-Control':'no-store'},body:buf});if(!r.ok){console.error('story storage status',r.status);throw Error('storage upload failed '+r.status)}}
  async function get(id){if(local)return objects.get(id);const r=await fetch(url+'/storage/v1/object/'+BUCKET+'/'+id+'.webp',{headers:headers()});if(!r.ok)throw Error('storage read failed');return Buffer.from(await r.arrayBuffer())}
  async function erase(s){if(!s.image)return true;if(local){objects.delete(s.id);return true}try{const r=await fetch(url+'/storage/v1/object/'+BUCKET,{method:'DELETE',headers:{...headers(),'Content-Type':'application/json'},body:JSON.stringify({prefixes:[s.id+'.webp']})});return r.ok}catch{return false}}
  let cleaning=false;
