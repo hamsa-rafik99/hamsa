@@ -58,6 +58,16 @@ const copyBtn = (id, text) => `<button class="btn sm ghost" data-act="copy" data
 const grow = t => { t.style.height = '46px'; const h = Math.min(t.scrollHeight, 120); t.style.height = h + 'px'; t.style.overflowY = t.scrollHeight > 120 ? 'auto' : 'hidden'; };
 document.addEventListener('input', e => { if (e.target.matches('.composer textarea')) grow(e.target); });
 
+// long-press (or right-click) a bubble to peek at its time; tap anywhere else to hide
+let lpT;
+const showT = b => { document.querySelectorAll('.b.showt').forEach(x => x.classList.remove('showt')); b.classList.add('showt'); };
+document.addEventListener('contextmenu', e => { const b = e.target.closest('.b'); if (b) { e.preventDefault(); showT(b); } });
+document.addEventListener('pointerdown', e => { clearTimeout(lpT); const b = e.target.closest('.b'); if (b) lpT = setTimeout(() => showT(b), 450); });
+document.addEventListener('pointerup', () => clearTimeout(lpT));
+document.addEventListener('pointercancel', () => clearTimeout(lpT));
+document.addEventListener('pointermove', () => clearTimeout(lpT));
+document.addEventListener('click', e => { if (!e.target.closest('.b')) document.querySelectorAll('.b.showt').forEach(x => x.classList.remove('showt')); });
+
 // one delegated click handler instead of inline onclick attributes (lets the CSP forbid inline scripts)
 document.addEventListener('click', e => {
   const mbtn = e.target.closest('[data-act=menu]');

@@ -187,3 +187,10 @@ textarea{resize:none}
 .istats>div{background:var(--soft);border-radius:14px;padding:12px;text-align:center}
 .istats b{display:block;font-size:22px;color:var(--p)}
 .istats span{font-size:12.5px;color:var(--mut)}
+
+/* ===== v11: compact bubbles, time on long-press ===== */
+.chat{gap:3px}
+.b{max-width:78%;padding:8px 13px;font-size:14.5px;line-height:1.65;user-select:none;-webkit-user-select:none}
+.b small{display:none}
+.b.showt small{display:block;font-size:10.5px;opacity:.65;margin-top:4px}
+.who{margin-top:6px}
