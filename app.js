@@ -13,10 +13,12 @@ const icGear = ics('<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M4.9 
 const icMoon = ics('<path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/>');
 const icUsers = ics('<path d="M17 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9.5" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9"/><path d="M16 3.1a4 4 0 0 1 0 7.8"/>');
 const icOut = ics('<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/>');
+const icStar = ics('<path d="M12 2.5l2.9 6.2 6.8.7-5.1 4.6 1.4 6.7-6-3.4-6 3.4 1.4-6.7L2.3 9.4l6.8-.7z"/>');
 const icCopy = ics('<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/>');
 const userMenu = u => `<div class="umenu"><button class="uav" data-act="menu" aria-label="القائمة">${u.avatar ? `<img src="${u.avatar}" alt="${esc(u.name || '')}">` : `<span>${esc((u.name || '?')[0])}</span>`}</button><div class="udrop" hidden>
 <div class="uhead">${av(u)}<div class="uhi"><b>${esc(u.name)}</b><span class="mut" dir="ltr">@${esc(u.username)}</span></div></div>
 <a class="uit" href="#/settings">${icGear}<span>الإعدادات</span></a>
+<a class="uit" href="#/missions">${icStar}<span>المهمات</span></a>
 <button class="uit" data-act="theme">${icMoon}<span class="mlab">${theme() === 'dark' ? 'الوضع الفاتح' : 'الوضع الداكن'}</span></button>
 <button class="uit" data-act="inv">${icUsers}<span>الدعوات</span></button>
 <button class="uit danger" data-act="out">${icOut}<span>تسجيل الخروج</span></button></div></div>`;
