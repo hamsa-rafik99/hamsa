@@ -93,6 +93,7 @@ module.exports = function createAdmin(ctx) {
       }
       if (!isAdmin(req)) return nf();
       if (m !== 'GET' && req.headers['x-admin'] !== '1') return send(res, 403, { error: 'forbidden' });
+      if(p.startsWith('/api/admin/story-reports')) return ctx.storyAdmin(req,res,p,m,b);
       if (p === '/api/admin/logout' && m === 'POST') { sessions.delete(sha(cookie(req).asid)); return send(res, 200, { ok: 1 }, { 'Set-Cookie': ck('', 0) }); }
       if (p === '/api/admin/overview') return send(res, 200, overview());
       if (p === '/api/admin/users') {

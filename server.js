@@ -86,6 +86,7 @@ function missionsFor(u) {
 
 const pub = u => ({ username: u.username, name: u.name, bio: u.bio, avatar: u.avatar || '', cover: u.cover || '', covery: u.covery ?? 50, since: u.created || 0, views: u.views || 0, stats: stats(u.username) });
 // Real client address behind Render/Cloudflare. Used ONLY for rate limits and the hidden block fingerprint, never stored in the clear.
+let stories;
 let admin; // created in boot() after the database is loaded
 const ip = req => String(req.headers['cf-connecting-ip'] || (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress);
 const fpOf = req => crypto.createHmac('sha256', db.secret).update(ip(req)).digest('hex').slice(0, 16);
@@ -123,6 +124,7 @@ async function api(req, res, url) {
   const m = req.method, p = url.pathname, u = me(req);
   let r;
   const b = (m === 'POST' || m === 'PUT' || m === 'PATCH') ? await body(req) : {};
+  if(p.startsWith('/api/stories')) return stories.handle(req,res,p,m,b);
   if (p === '/api/config') return send(res, 200, { name: db.settings.siteName || SITE_NAME });
   if (p.startsWith('/api/admin/')) return admin.handle(req, res, p, m, b);
   if (p === '/api/signup' && m === 'POST') {
@@ -366,6 +368,8 @@ server.requestTimeout = 20000; server.headersTimeout = 10000; server.keepAliveTi
 (async function boot() {
   if (SB_URL) { try { const rows = await remote('GET', '?id=eq.db&select=data'); if (rows[0]) Object.assign(db, rows[0].data); console.log('database loaded from Supabase'); } catch (e) { console.error('remote load failed, refusing to start to avoid overwriting data:', e.message); process.exit(1); } }
   if (!Array.isArray(db.missions)) { db.missions = defaultMissions(); save(); }
-  admin = require('./admin')({ db, send, limited, ip, fpOf, sha, same, hash, save, cookie, HTTPS, metrics, dbFile: DB_FILE, remote: !!SB_URL, missionTypes: Object.fromEntries(Object.entries(MISSION_METRICS).map(([k, v]) => [k, v.label])) });
+  admin = require('./admin')({ db, send, limited, ip, fpOf, sha, same, hash, save, cookie, HTTPS, metrics, dbFile: DB_FILE, remote: !!SB_URL, storyAdmin:(...args)=>stories.admin(...args), missionTypes: Object.fromEntries(Object.entries(MISSION_METRICS).map(([k, v]) => [k, v.label])) });
+  stories = require('./stories')({db,send,me,save,limited,ip,rid,SEC,adminLog:admin.log});
+  stories.cleanup();
   server.listen(PORT, () => console.log('http://localhost:' + PORT + (admin.enabled ? ' (admin on)' : '')));
 })();

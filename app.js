@@ -121,12 +121,14 @@ async function loadAdmin(tab) {
 }
 async function route() {
   clearInterval(timer);
+  document.querySelector('.storymodal')?.remove();
   const h = location.hash.slice(1) || '/'; let m;
   try {
     if ((m = h.match(/^\/u\/([a-z0-9_]+)$/))) return pageSend(m[1]);
     if ((m = h.match(/^\/t\/([A-Za-z0-9-]+)$/))) return pageTrack(m[1].toUpperCase());
     if ((m = h.match(/^\/inbox\/([A-Za-z0-9-]+)$/))) return pageThread(m[1].toUpperCase());
     if (h === '/inbox') return pageInbox();
+    if (h === '/stories/new') return pageStoryCompose();
     if (h === '/follow') return pageFollow();
     if (h === '/settings') return pageSettings();
     if (h === '/missions') return pageMissions();
@@ -151,20 +153,26 @@ async function pageHome() {
   <div class="row cta"><a class="btn big" href="#/signup">اعمل صفحتك مجانًا</a><a class="btn big ghost" href="#/login">عندي حساب</a></div>
   <form class="follow" id="ff"><input id="fc" dir="ltr" placeholder="معاك كود رسالة؟ اكتبه هنا" autocomplete="off"><button class="btn">تابع الرد</button></form></div>
   <div class="hvis" aria-hidden="true"><div class="phone"><div class="pt">محادثة مجهولة</div><div class="chat"><div class="b mine">محتواك حلو جدًا، كمل كده 😄<small>مجهول</small></div><div class="b theirs">ميرسي ليك! مين حضرتك؟ 😄<small>رد من صاحب الصفحة</small></div><div class="b mine">سر 😉 بس متابعك من زمان<small>مجهول</small></div></div></div></div></section>
-  <section class="sec"><h2>إزاي بتشتغل؟</h2><div class="grid3">${step(1, 'اعمل صفحتك', 'سجّل في ثواني واحصل على لينك خاص بيك.')}${step(2, 'شارك اللينك', 'حطه في الستوري أو البايو، وأي حد يقدر يبعتلك رسالة من غير اسم.')}${step(3, 'اقرا وردّ', 'الرسايل بتوصلك، وإنت تردّ، والمرسل يتابع الرد بكود خاص بيه.')}</div></section>
-  <section class="sec alt"><h2>ليه ${S}؟</h2><div class="grid4">${feat('✉', 'ردود بشكل شات', 'محادثة حديثة بفقاعات، مش مجرد رسايل منفصلة.')}${feat('✓', 'كود متابعة للمرسل', 'المرسل يفضل مجهول وياخد كود يرجع بيه يشوف الرد.')}${feat('★', 'شارك كصورة', `حوّل المحادثة لصورة عليها اسم ${S} وانشرها على السوشيال.`)}${feat('♥', 'إشعارات', 'تنبيه لما توصلك رسالة، من غير ما نكتب نص الرسالة فيه.')}${feat('✎', 'تحكم كامل', 'احظر، احذف، أو اقفل استقبال الرسايل في أي وقت.')}${feat('☺', 'بروفايل مميز', 'صورة وغلاف ونبذة وإحصائيات لصفحتك.')}</div></section>
-  <section class="sec alt"><h2 style="margin-bottom:2px">المهمات والنقاط</h2><p class="mut" style="text-align:center;margin:0 0 18px">كل حركة على ${S} بتتحسب ليك</p><div class="tmcard">
-  <div class="tmmini"><span class="tmic">★</span><div class="tmgrow"><b>استقبل رسايل على صفحتك</b><span>كل خطوة ليها مكافأة</span></div><span class="tmpts">+١٠</span></div>
-  <div class="tmmini"><span class="tmic">★</span><div class="tmgrow"><b>ادعُ أصحابك</b><span>مراحل بتتفتح واحدة ورا التانية</span></div><span class="tmpts">+٥٠</span></div>
-  <div class="tmmini"><span class="tmic">★</span><div class="tmgrow"><b>كمّل ملفك وانشر لينكك</b><span>نقط سهلة من أول يوم</span></div><span class="tmpts">+٢٥</span></div>
+  <div class="tabwrap"><div class="chipbar" id="lchips"><button class="chip on" type="button">المهمات والنقاط</button><button class="chip" type="button">إزاي بتشتغل؟</button><button class="chip" type="button">ليه ${S}؟</button></div><div class="tpanes" id="lpanes">
+  <div class="tpanel on"><h2 class="panelheading">المهمات والنقاط</h2><div class="tmcard">
   <div class="tmlock"><span class="tmq">؟؟؟</span><div class="tmgrow"><b>مهمات مخفية</b><span>محدش يعرفها... هتتكشف لو عملتها بالصدفة</span></div></div>
   <div class="tmlock"><span class="tmq">؟؟؟</span><div class="tmgrow"><b>مهمات مخفية</b><span>وفي كمان، وكمان...</span></div></div>
   <div class="tmhook">كن أول واحد يكتشف المهمات المخفية ☝️</div>
-  <p class="mut" style="text-align:center;font-size:13px;margin:4px 0 10px">سجل دلوقتي وابدأ اكسب نقط</p>
-  <a class="btn big full" href="#/signup" style="display:block;text-align:center">اعمل صفحتك مجاناً</a></div></section>
+  <div class="tmmini"><span class="tmic">★</span><div class="tmgrow"><b>استقبل رسايل على صفحتك</b><span>كل خطوة ليها مكافأة</span></div><span class="tmpts">+١٠</span></div>
+  <div class="tmmini"><span class="tmic">★</span><div class="tmgrow"><b>ادعُ أصحابك</b><span>مراحل بتتفتح واحدة ورا التانية</span></div><span class="tmpts">+٥٠</span></div>
+  <div class="tmmini"><span class="tmic">★</span><div class="tmgrow"><b>كمّل ملفك وانشر لينكك</b><span>نقط سهلة من أول يوم</span></div><span class="tmpts">+٢٥</span></div>
+  <p class="mut" style="text-align:center;font-size:13px;margin:10px 0">سجل دلوقتي وابدأ اكسب نقط</p>
+  <a class="btn big full" href="#/signup" style="display:block;text-align:center">اعمل صفحتك مجاناً</a></div></div>
+  <div class="tpanel"><h2 class="panelheading">إزاي بتشتغل؟</h2><div class="grid3">${step(1, 'اعمل صفحتك', 'سجّل في ثواني واحصل على لينك خاص بيك.')}${step(2, 'شارك اللينك', 'حطه في الستوري أو البايو، وأي حد يقدر يبعتلك رسالة من غير اسم.')}${step(3, 'اقرا وردّ', 'الرسايل بتوصلك، وإنت تردّ، والمرسل يتابع الرد بكود خاص بيه.')}</div></div>
+  <div class="tpanel"><h2 class="panelheading">ليه ${S}؟</h2><div class="grid4">${feat('✉', 'ردود بشكل شات', 'محادثة حديثة بفقاعات، مش مجرد رسايل منفصلة.')}${feat('✓', 'كود متابعة للمرسل', 'المرسل يفضل مجهول وياخد كود يرجع بيه يشوف الرد.')}${feat('★', 'شارك كصورة', `حوّل المحادثة لصورة عليها اسم ${S} وانشرها على السوشيال.`)}${feat('♥', 'إشعارات', 'تنبيه لما توصلك رسالة، من غير ما نكتب نص الرسالة فيه.')}${feat('✎', 'تحكم كامل', 'احظر، احذف، أو اقفل استقبال الرسايل في أي وقت.')}${feat('☺', 'بروفايل مميز', 'صورة وغلاف ونبذة وإحصائيات لصفحتك.')}</div></div>
+  </div></div>
   <section class="sec"><div class="endcta"><h2>جاهز تبدأ؟</h2><p>الحساب مجاني وبياخد أقل من دقيقة.</p><a class="btn big" href="#/signup">ابدأ دلوقتي</a></div></section>
   <footer class="lfoot">${S} · رسايل مجهولة بكل احترام</footer></div>`;
   $('#ff').onsubmit = e => { e.preventDefault(); if ($('#fc').value.trim()) location.hash = '#/t/' + $('#fc').value.trim().toUpperCase(); };
+  const lchips=[...document.querySelectorAll('#lchips .chip')],lpanes=[...document.querySelectorAll('#lpanes .tpanel')];let lcur=0;
+  const lshow=li=>{lcur=li;lchips.forEach((c,j)=>c.classList.toggle('on',j===li));lpanes.forEach((p,j)=>p.classList.toggle('on',j===li));};
+  let ltimer=setInterval(()=>{if(!document.contains(lchips[0])){clearInterval(ltimer);return}lshow((lcur+1)%3)},3000);
+  lchips.forEach((c,li)=>c.onclick=()=>{clearInterval(ltimer);lshow(li)});
 }
 async function pageJoin(code) {
   let inviter = null; try { inviter = await api('/invite/' + code); } catch { sessionStorage.removeItem('ref'); }
@@ -216,9 +224,10 @@ async function pageInbox() {
   const u = await api('/me'), { threads } = await api('/inbox'), link = `${origin}/u/${u.username}`;
   if (!u.ogimg) genBanner(u);
   const shareTxt = `صارحني من غير ما تقول مين انت: ابعتلي رسالة مجهولة على ${SITE} وهرد عليك، وهتتابع ردّي من نفس اللينك`;
-  app.innerHTML = shell(`${profileHead(u, true)}<div class="card center"><p class="sub">شارك رابطك على ستوري أو بروفايلك واستقبل رسايل مجهولة</p>${bigCopy(link, 'نسخ اللينك')}${navigator.share ? `<button class="btn full" data-act="share" data-text="${esc(link)}" data-stext="${esc(shareTxt)}" style="margin-top:10px">شارك لينكك</button>` : ''}</div>
+  app.innerHTML = shell(`<div id="storystrip"></div>${profileHead(u, true)}<div class="card center"><p class="sub">شارك رابطك على ستوري أو بروفايلك واستقبل رسايل مجهولة</p>${bigCopy(link, 'نسخ اللينك')}${navigator.share ? `<button class="btn full" data-act="share" data-text="${esc(link)}" data-stext="${esc(shareTxt)}" style="margin-top:10px">شارك لينكك</button>` : ''}</div>
   ${threads.length ? `<div class="sect"><b>الرسايل</b><span class="badge new">${nf(threads.length)}</span></div>` + threads.map(t => `<a class="thread ${t.unread ? 'unread' : ''}" href="#/inbox/${t.id}"><span class="tav">${t.starred ? '★' : '؟'}</span><div class="tc"><div class="t"><b>مجهول</b><span class="mut">${time(t.last.t)}</span></div><div class="m mut">${t.last.from === 'owner' ? 'أنت: ' : ''}${esc(t.last.text)}</div><div class="tb">${t.unread ? '<span class="badge new">جديدة</span>' : ''}${t.count > 1 ? `<span class="badge">${nf(t.count)} رسايل</span>` : ''}${t.replied ? '<span class="badge soft">اترد عليها</span>' : ''}</div></div></a>`).join('') : '<div class="empty">مفيش رسايل لسه.<br>أول ما حد يبعتلك هتظهر هنا.</div>'}`,
     `<a class="btn sm" href="#/settings/invite">+ ادعُ أصحابك</a>${userMenu(u)}`);
+  loadStoryStrip();
   const sig = JSON.stringify(threads.map(t => [t.id, t.count, t.unread, t.starred, t.replied]));
   timer = setInterval(async () => { try { if (location.hash !== '#/inbox') return; const r = await api('/inbox'); if (JSON.stringify(r.threads.map(t => [t.id, t.count, t.unread, t.starred, t.replied])) !== sig) pageInbox(); } catch (e) {} }, 15000);
   document.querySelectorAll('a.thread').forEach(a => a.addEventListener('click', ev => { ev.preventDefault(); location.hash = a.getAttribute('href'); }));
@@ -348,4 +357,25 @@ function shareDialog(msgs, ownerName, ownerView) {
     $('#dl2').onclick = () => { const a = document.createElement('a'); a.href = url; a.download = SITE + '-chat.png'; a.click(); };
     $('#sh2').onclick = () => navigator.canShare && navigator.canShare({ files: [f] }) ? navigator.share({ files: [f] }).catch(() => {}) : $('#dl2').click(); });
   $('#cl2').onclick = () => d.remove(); d.onclick = e => { if (e.target === d) d.remove(); };
+}
+
+async function loadStoryStrip(){
+ try{const {stories}=await api('/stories'),box=$('#storystrip');if(!box)return;const groups=[];for(const s of stories)if(!groups.some(x=>x.owner===s.owner))groups.push(s);
+ box.innerHTML=`<section class="storybox"><div class="stitle"><b>الاستوري</b><button class="storyreset" id="storyreset">إظهار المخفي</button></div><div class="storyrings"><a class="storyitem" href="#/stories/new"><span class="storyring add">+</span><span>ضيف استوري</span></a>${groups.map(s=>`<button class="storyitem" data-story="${esc(s.owner)}"><span class="storyring ${s.seen?'seen':''}">${s.avatar?`<img src="${esc(s.avatar)}" alt="">`:esc(s.name[0]||'؟')}</span><span>${s.own?'استوري بتاعتك':esc(s.name)}</span></button>`).join('')}</div></section>`;
+ $('#storyreset').onclick=async()=>{await api('/stories/reset-hidden','POST');loadStoryStrip()};
+ box.querySelectorAll('[data-story]').forEach(b=>b.onclick=()=>openStories(stories.filter(s=>s.owner===b.dataset.story).reverse(),0));
+ }catch{}}
+function openStories(list,index){
+ document.querySelector('.storymodal')?.remove();if(index>=list.length)return;const s=list[index];if(s.exp<=Date.now())return loadStoryStrip();const d=document.createElement('div');d.className='storymodal';d.innerHTML=`<div class="storyview"><div class="storyprogress">${list.map((x,i)=>`<span class="${i<=index?'on':''}"></span>`).join('')}</div><div class="storyhead"><b>${esc(s.name)}</b><small>باقي ${Math.max(1,Math.ceil((s.exp-Date.now())/36e5))} ساعة</small><button data-sc="close">×</button></div><div class="storycontent scolor-${esc(s.color)}">${s.image?`<img src="${esc(s.image)}" alt="استوري صورة">`:`<p>${esc(s.text)}</p>`}</div><div class="storycontrols"><button data-sc="prev">→ السابقة</button><button data-sc="next">التالية ←</button></div><div class="storyactions">${s.own?`<span>المشاهدات: ${nf(s.views||0)}</span><button data-sc="delete">حذف</button>`:'<button data-sc="report">إبلاغ</button><button data-sc="hide">إخفاء استوري الحساب</button>'}</div></div>`;document.body.append(d);api('/stories/'+s.id+'/view','POST').catch(()=>{});
+ const exp=setTimeout(()=>{d.remove();loadStoryStrip()},Math.max(0,s.exp-Date.now()));const close=()=>{clearTimeout(exp);d.remove()};
+ d.onclick=async e=>{const act=e.target.closest('[data-sc]')?.dataset.sc;if(!act)return;try{if(act==='close')close();if(act==='next'||act==='prev'){close();openStories(list,Math.max(0,index+(act==='next'?1:-1)))}if(act==='delete'&&confirm('تحذف الاستوري؟')){await api('/stories/'+s.id,'DELETE');close();loadStoryStrip()}if(act==='report'){const reason=prompt('سبب البلاغ (الإدارة هتشوف الاستوري دي بس)');if(reason===null)return;await api('/stories/'+s.id+'/report','POST',{reason});alert('وصل البلاغ')}if(act==='hide'&&confirm('تخفي استوري الحساب ده؟ تقدر ترجعه من زر إظهار المخفي.')){await api('/stories/'+s.id+'/hide','POST');close();loadStoryStrip()}}catch(e){alert(e.message)}};
+}
+async function pageStoryCompose(){
+ const u=await api('/me');app.innerHTML=shell(`<div class="card"><div class="row" style="justify-content:space-between"><h1>ضيف استوري</h1><a href="#/inbox" class="mut">إلغاء</a></div><div class="storymodes"><button class="btn" id="stext">كلام</button><button class="btn ghost" id="simage">صورة</button></div><div class="storypreview scolor-orange" id="spreview">اكتب اللي في بالك</div><div id="stextbox"><textarea id="storytext" maxlength="500" rows="3" placeholder="اكتب اللي في بالك..."></textarea><div class="storyswatches">${['orange','green','purple','black'].map(c=>`<button class="scolor-${c}" data-scolor="${c}" aria-label="خلفية ${c}"></button>`).join('')}</div><div class="mut" id="scount">٠ / ٥٠٠ حرف</div></div><div id="simagebox" hidden><label class="btn ghost full" for="storyfile" style="display:block;text-align:center">اختار صورة</label><input id="storyfile" type="file" accept="image/jpeg,image/png,image/webp" hidden><p class="mut">JPG أو PNG أو WebP حتى ٥ ميجا. هنصغّرها قبل الرفع.</p></div><div class="storynotice">هتظهر لكل الأعضاء المسجلين باسمك، وتختفي بعد ٢٤ ساعة من النشر. تقدر تحذفها في أي وقت.<br>ممكن حد ياخد لقطة شاشة، متشاركش معلومات حساسة.</div><p id="serror" class="mut"></p><button class="btn full big" id="spublish">انشر الاستوري</button></div>`,userMenu(u));
+ let mode='text',color='orange',image='';const preview=$('#spreview');
+ const update=()=>{preview.className='storypreview scolor-'+color;preview.innerHTML=mode==='image'?(image?`<img src="${image}" alt="معاينة الصورة">`:'اختار صورة للمعاينة'):esc($('#storytext').value||'اكتب اللي في بالك');$('#scount').textContent=nf($('#storytext').value.length)+' / ٥٠٠ حرف'};
+ $('#storytext').oninput=update;document.querySelectorAll('[data-scolor]').forEach(b=>b.onclick=()=>{color=b.dataset.scolor;update()});
+ const setmode=m=>{mode=m;$('#stextbox').hidden=m!=='text';$('#simagebox').hidden=m!=='image';$('#stext').classList.toggle('ghost',m!=='text');$('#simage').classList.toggle('ghost',m!=='image');update()};$('#stext').onclick=()=>setmode('text');$('#simage').onclick=()=>setmode('image');
+ $('#storyfile').onchange=async()=>{const f=$('#storyfile').files[0];if(!f)return;try{if(f.size>5e6||!['image/jpeg','image/png','image/webp'].includes(f.type))throw Error('اختار صورة JPG أو PNG أو WebP أقل من ٥ ميجا');const bitmap=await createImageBitmap(f),scale=Math.min(1,1080/Math.max(bitmap.width,bitmap.height)),c=document.createElement('canvas');c.width=Math.round(bitmap.width*scale);c.height=Math.round(bitmap.height*scale);c.getContext('2d').drawImage(bitmap,0,0,c.width,c.height);bitmap.close();let q=.8,data;do{data=c.toDataURL('image/webp',q);q-=.1}while(data.length>330000&&q>.25);if(data.length>330000)throw Error('الصورة كبيرة، جرب صورة أصغر');image=data;update();$('#serror').textContent=''}catch(e){$('#serror').textContent=e.message}};
+ $('#spublish').onclick=async()=>{const b=$('#spublish');b.disabled=true;try{await api('/stories','POST',mode==='image'?{image}:{text:$('#storytext').value,color});location.hash='#/inbox'}catch(e){$('#serror').textContent=e.message;b.disabled=false}};
 }

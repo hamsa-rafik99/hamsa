@@ -9,9 +9,9 @@ async function pageAdmin(tab = 'overview') {
   clearInterval(adminTimer);
   let ov;
   try { ov = await aapi('/overview'); } catch (e) { return adminLogin(); }
-  const tabs = [['overview', 'نظرة عامة', '◈'], ['users', 'المستخدمين', '☻'], ['signups', 'التسجيلات والدعوات', '⇪'], ['missions', 'المهمات', '★'], ['reports', 'البلاغات', '⚑'], ['settings', 'الإعدادات', '⚙'], ['log', 'سجل النشاط', '≡']];
+  const tabs = [['overview', 'نظرة عامة', '◈'], ['users', 'المستخدمين', '☻'], ['signups', 'التسجيلات والدعوات', '⇪'], ['missions', 'المهمات', '★'], ['storyreports', 'بلاغات الاستوري', '◉'], ['reports', 'البلاغات', '⚑'], ['settings', 'الإعدادات', '⚙'], ['log', 'سجل النشاط', '≡']];
   const nav = tabs.map(([k, l, ic]) => `<a class="${k === tab ? 'on' : ''}" href="#/admin/${k}"><i>${ic}</i><span>${l}</span>${k === 'reports' && ov.reports + ov.flagged ? ` <em class="badge bad">${num(ov.reports + ov.flagged)}</em>` : ''}</a>`).join('');
-  const body = await ({ overview: adminOverview, users: adminUsers, signups: adminSignups, missions: adminMissions, reports: adminReports, settings: adminSettings, log: adminLog }[tab] || adminOverview)(ov);
+  const body = await ({ overview: adminOverview, users: adminUsers, signups: adminSignups, missions: adminMissions, storyreports: adminStoryReports, reports: adminReports, settings: adminSettings, log: adminLog }[tab] || adminOverview)(ov);
   app.innerHTML = shell(`<div class="adm"><aside class="aside"><div class="abrand">لوحة التحكم</div><nav>${nav}</nav><button class="btn sm ghost" id="alo">تسجيل خروج</button></aside><main class="amain">${body.html}</main></div>`);
   $('#alo').onclick = async () => { clearInterval(adminTimer); await aapi('/logout', 'POST'); location.hash = '#/admin'; };
   body.bind && body.bind();
@@ -171,3 +171,5 @@ async function adminMissions() {
     };
   } };
 }
+
+async function adminStoryReports(){const {stories}=await aapi('/story-reports');return {html:`<h1>بلاغات الاستوري</h1><p class="mut">الاستوري المبلّغ عنها فقط. الاستوري المنتهية لا تُعرض.</p>`+(stories.length?stories.map(s=>`<div class="card"><b>@${esc(s.owner)}</b>${s.image?`<img src="/api/admin/story-reports/${esc(s.id)}/media" style="max-height:300px;max-width:100%;display:block" alt="استوري مبلّغ عنها">`:`<p>${esc(s.text)}</p>`}${s.reports.map(r=>`<p class="mut">${esc(r.reason||'بدون سبب')}</p>`).join('')}<button class="btn sm" data-sid="${esc(s.id)}" data-sa="delete">حذف الاستوري</button> <button class="btn sm ghost" data-sid="${esc(s.id)}" data-sa="dismiss">تجاهل البلاغ</button></div>`).join(''):'<div class="card empty">مفيش بلاغات استوري.</div>'),bind(){app.onclick=async e=>{const b=e.target.closest('[data-sid]');if(!b)return;await aapi('/story-reports/'+b.dataset.sid+'/'+b.dataset.sa,'POST');pageAdmin('storyreports')}}}}
