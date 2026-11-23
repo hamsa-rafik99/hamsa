@@ -141,6 +141,28 @@ module.exports = function createAdmin(ctx) {
       }
       if (p === '/api/admin/feed') return send(res, 200, { feed: db.feedLog.slice(0, 40) });
       if (p === '/api/admin/log') return send(res, 200, { log: db.audit.slice(0, 200) });
+            if (p === '/api/admin/missions' && m === 'GET') return send(res, 200, { missions: db.missions || [], types: ctx.missionTypes || {} });
+      const cleanMission = (bb, existing) => {
+        const title = String(bb.title || '').trim().slice(0, 60); if (!title) return { error: 'اكتب اسم المهمة' };
+        const desc = String(bb.desc || '').trim().slice(0, 200);
+        const type = String(bb.type || ''); if (!(ctx.missionTypes || {})[type]) return { error: 'نوع الشرط مش معروف' };
+        const stages = (Array.isArray(bb.stages) ? bb.stages : []).slice(0, 8).map(s => ({ target: Math.floor(Number(s.target)), pts: Math.floor(Number(s.pts)) })).filter(s => Number.isFinite(s.target) && Number.isFinite(s.pts) && s.target >= 1 && s.target <= 1000000 && s.pts >= 1 && s.pts <= 100000);
+        if (!stages.length) return { error: 'ضيف مرحلة واحدة على الأقل بهدف ونقاط صحيحة' };
+        stages.sort((a, b2) => a.target - b2.target);
+        return { m: { id: existing ? existing.id : 'm' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6), title, desc, type, secret: bb.secret === true, active: bb.active !== false, stages } };
+      };
+      if (p === '/api/admin/missions' && m === 'POST') {
+        const v = cleanMission(b); if (v.error) return send(res, 400, { error: v.error });
+        db.missions = db.missions || []; db.missions.push(v.m); log('mission_created', v.m.id + ' ' + v.m.title); save();
+        return send(res, 200, { ok: 1, id: v.m.id });
+      }
+      if ((r = p.match(/^\/api\/admin\/missions\/([\w-]+)$/))) {
+        db.missions = db.missions || [];
+        const ms = db.missions.find(x => x.id === r[1]); if (!ms) return send(res, 404, { error: 'مش موجود' });
+        if (m === 'DELETE') { db.missions = db.missions.filter(x => x !== ms); log('mission_deleted', ms.id + ' ' + ms.title); save(); return send(res, 200, { ok: 1 }); }
+        if (m === 'PUT') { const v = cleanMission(b, ms); if (v.error) return send(res, 400, { error: v.error }); Object.assign(ms, v.m, { id: ms.id }); log('mission_updated', ms.id + ' ' + ms.title); save(); return send(res, 200, { ok: 1 }); }
+        return nf();
+      }
       return nf();
     },
   };

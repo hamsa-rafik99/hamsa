@@ -41,6 +41,49 @@ const me = req => { const sid = cookie(req).sid, s = sid && db.sessions[sha(sid)
 const clean = (t, max) => String(t || '').replace(/\s+\n/g, '\n').trim().slice(0, max);
 const img = v => typeof v === 'string' && v.length < 260000 && /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+\/=]+$/.test(v);
 const stats = un => { let got = 0, rep = 0, th = 0; for (const t of Object.values(db.threads)) if (t.to === un) { th++; got += t.msgs.filter(m => m.from === 'anon').length; rep += t.msgs.filter(m => m.from === 'owner').length; } return { received: got, replies: rep, threads: th }; };
+// المهمات: missions live in db.missions so the admin can create/edit them (visible + hidden, multi-stage).
+// Progress is computed live from user state. sentAnon is a counter only: no link between sender identity and threads.
+const cairoHour = t => Number(new Intl.DateTimeFormat('en-US', { timeZone: 'Africa/Cairo', hour: 'numeric', hour12: false }).format(new Date(t)));
+const cairoDay = t => new Intl.DateTimeFormat('en-CA', { timeZone: 'Africa/Cairo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(t));
+const MISSION_METRICS = {
+  received: { label: 'رسائل مستلمة على الصفحة', calc: u => stats(u.username).received },
+  replies: { label: 'ردود صاحب الصفحة', calc: u => stats(u.username).replies },
+  sentAnon: { label: 'رسائل مرسلة وهو مسجل دخوله', calc: u => u.sentAnon || 0 },
+  visits: { label: 'زيارات الصفحة', calc: u => u.views || 0 },
+  invites: { label: 'أصحاب سجلوا من رابط الدعوة', calc: u => Object.values(db.users).filter(q => q.invitedBy === u.username).length },
+  shares: { label: 'مشاركات رابط الصفحة', calc: u => (u.events && u.events.share) || 0 },
+  profile: { label: 'اكتمال الملف (صورة + غلاف + نبذة)', calc: u => (u.avatar ? 1 : 0) + (u.cover ? 1 : 0) + (u.bio ? 1 : 0) },
+  night: { label: 'رسالة بين 12 و 4 الفجر', calc: u => Object.values(db.threads).filter(t => t.to === u.username).flatMap(t => t.msgs).some(m => cairoHour(m.t) < 4) ? 1 : 0 },
+  marathon: { label: 'أكتر عدد ردود في يوم واحد', calc: u => { const byDay = {}; for (const t of Object.values(db.threads)) if (t.to === u.username) for (const m of t.msgs) if (m.from === 'owner') { const d = cairoDay(m.t); byDay[d] = (byDay[d] || 0) + 1; } return Math.max(0, ...Object.values(byDay)); } },
+  coverChanges: { label: 'تغييرات صورة الغلاف', calc: u => u.coverChanges || 0 },
+  veteran: { label: 'عضوية ٣٠ يوم مع نشاط', calc: u => (Date.now() - (u.created || 0) > 30 * 864e5 && stats(u.username).received > 0) ? 1 : 0 },
+};
+const defaultMissions = () => [
+  { id: 'first-msg', title: 'أول همسة', desc: 'استقبل أول رسالة على صفحتك', type: 'received', secret: false, active: true, stages: [{ target: 1, pts: 10 }] },
+  { id: 'profile', title: 'كمّل ملفك', desc: 'حط صورة شخصية وغلاف ونبذة', type: 'profile', secret: false, active: true, stages: [{ target: 3, pts: 15 }] },
+  { id: 'share', title: 'انشر لينكك', desc: 'شارك لينك صفحتك أول مرة', type: 'shares', secret: false, active: true, stages: [{ target: 1, pts: 10 }] },
+  { id: 'invite', title: 'صديق الناس', desc: 'ادعُ أصحابك وساعد همسه تكبر', type: 'invites', secret: false, active: true, stages: [{ target: 5, pts: 5 }, { target: 10, pts: 15 }, { target: 25, pts: 40 }] },
+  { id: 'replies-50', title: 'ردود ما بتقفش', desc: 'ابعت 50 رد على الرسايل', type: 'replies', secret: false, active: true, stages: [{ target: 50, pts: 40 }] },
+  { id: 'sent-100', title: 'همّاس بجد', desc: 'ابعت 100 رسالة مجهولة لأصحابك وانت مسجل دخولك', type: 'sentAnon', secret: false, active: true, stages: [{ target: 100, pts: 50 }] },
+  { id: 'received-100', title: 'صندوق مليان', desc: 'وصلك 100 رسالة', type: 'received', secret: false, active: true, stages: [{ target: 100, pts: 50 }] },
+  { id: 'visits-100', title: 'نجم معروف', desc: 'وصّل زيارات صفحتك لـ 100', type: 'visits', secret: false, active: true, stages: [{ target: 100, pts: 30 }] },
+  { id: 'night-owl', title: 'همسة نص الليل', desc: 'اتبعت أو وصلتك رسالة بين 12 و 4 الفجر', type: 'night', secret: true, active: true, stages: [{ target: 1, pts: 25 }] },
+  { id: 'marathon', title: 'ماراثون الردود', desc: 'رد على 10 رسايل في يوم واحد', type: 'marathon', secret: true, active: true, stages: [{ target: 10, pts: 30 }] },
+  { id: 'cover-artist', title: 'فنان أغلفة', desc: 'غيّر صورة الغلاف 3 مرات', type: 'coverChanges', secret: true, active: true, stages: [{ target: 3, pts: 15 }] },
+  { id: 'veteran', title: 'قديم وغالي', desc: 'كمّل شهر معانا ولسه نشط', type: 'veteran', secret: true, active: true, stages: [{ target: 1, pts: 20 }] },
+];
+function missionsFor(u) {
+  let points = 0;
+  const missions = (db.missions || []).filter(m => m.active !== false && MISSION_METRICS[m.type]).map(m => {
+    const v = Math.max(0, Math.floor(MISSION_METRICS[m.type].calc(u) || 0));
+    const stages = (m.stages || []).map(s => ({ target: s.target, pts: s.pts, done: v >= s.target }));
+    for (const s of stages) if (s.done) points += s.pts;
+    const cur = stages.findIndex(s => !s.done), done = stages.length > 0 && cur === -1;
+    return { id: m.id, title: m.title, desc: m.desc, secret: !!m.secret, stages, done, current: done ? 0 : Math.max(0, cur), prog: v, ptsTotal: stages.reduce((a, s) => a + s.pts, 0) };
+  });
+  return { points, missions };
+}
+
 const pub = u => ({ username: u.username, name: u.name, bio: u.bio, avatar: u.avatar || '', cover: u.cover || '', covery: u.covery ?? 50, since: u.created || 0, views: u.views || 0, stats: stats(u.username) });
 // Real client address behind Render/Cloudflare. Used ONLY for rate limits and the hidden block fingerprint, never stored in the clear.
 let admin; // created in boot() after the database is loaded
@@ -79,7 +122,7 @@ const emailOk = e => /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(e);
 async function api(req, res, url) {
   const m = req.method, p = url.pathname, u = me(req);
   let r;
-  const b = m === 'POST' ? await body(req) : {};
+  const b = (m === 'POST' || m === 'PUT' || m === 'PATCH') ? await body(req) : {};
   if (p === '/api/config') return send(res, 200, { name: db.settings.siteName || SITE_NAME });
   if (p.startsWith('/api/admin/')) return admin.handle(req, res, p, m, b);
   if (p === '/api/signup' && m === 'POST') {
@@ -115,6 +158,16 @@ async function api(req, res, url) {
     return x ? send(res, 200, { name: x.name }) : send(res, 404, { error: 'لينك الدعوة مش صحيح' });
   }
   if (p === '/api/logout' && m === 'POST') { delete db.sessions[sha(cookie(req).sid || '')]; save(); return send(res, 200, { ok: 1 }, { 'Set-Cookie': `sid=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0${HTTPS ? '; Secure' : ''}` }); }
+  if (p === '/api/missions' && m === 'GET') {
+    if (!u) return send(res, 401, { error: 'auth' });
+    const { points, missions: ms } = missionsFor(u);
+    return send(res, 200, { points, missions: ms.map(m => m.secret && !m.done ? { secret: true, locked: true } : m), lockedCount: ms.filter(m => m.secret && !m.done).length });
+  }
+  if (p === '/api/event' && m === 'POST') {
+    if (!u) return send(res, 401, { error: 'auth' });
+    if (b.t === 'share') { u.events = u.events || {}; u.events.share = (u.events.share || 0) + 1; save(); }
+    return send(res, 200, { ok: 1 });
+  }
   if (p === '/api/me') return u ? send(res, 200, { ...pub(u), open: u.open, email: u.email || '', ogimg: !!u.ogimg }) : send(res, 401, { error: 'auth' });
   if (p === '/api/og-image' && m === 'POST') {
     if (!u) return send(res, 401, { error: 'auth' });
@@ -165,7 +218,7 @@ async function api(req, res, url) {
     if (!u) return send(res, 401, { error: 'auth' });
     u.name = clean(b.name, 40) || u.username; u.bio = clean(b.bio, 200); u.open = b.open !== false;
     if (b.covery !== undefined) { const y = Number(b.covery); if (isFinite(y)) u.covery = Math.max(0, Math.min(100, Math.round(y))); }
-    for (const k of ['avatar', 'cover']) { if (b[k] === '') delete u[k]; else if (b[k] !== undefined) { if (!img(b[k])) return send(res, 400, { error: 'الصورة لازم تكون JPG أو PNG وحجمها أقل من 250KB' }); u[k] = b[k]; } }
+    for (const k of ['avatar', 'cover']) { if (b[k] === '') delete u[k]; else if (b[k] !== undefined) { if (!img(b[k])) return send(res, 400, { error: 'الصورة لازم تكون JPG أو PNG وحجمها أقل من 250KB' }); if (k === 'cover' && b[k] !== u.cover) u.coverChanges = (u.coverChanges || 0) + 1; u[k] = b[k]; } }
     save();
     return send(res, 200, pub(u));
   }
@@ -179,6 +232,7 @@ async function api(req, res, url) {
     if (limited('rc' + x.username, db.settings.perRecipientPerHour, 3600e3)) return send(res, 429, { error: 'الصفحة دي جاتلها رسايل كتير، جرب بعد شوية' });
     if ((x.blocked || []).includes(fp) || db.bannedFp.includes(fp)) return send(res, 200, { code: code() }); // blocked senders look like success
     const c = code();
+    const sender = me(req); if (sender && sender.username !== x.username) sender.sentAnon = (sender.sentAnon || 0) + 1;
     db.threads[c] = { code: c, to: x.username, fp, created: Date.now(), starred: false, unread: true, msgs: [{ from: 'anon', text, t: Date.now() }] };
     if (admin.flagged(text)) db.threads[c].flagged = true;
     admin.bump('messages'); admin.feed('message', '@' + x.username);
@@ -311,6 +365,7 @@ const server = http.createServer(async (req, res) => {
 server.requestTimeout = 20000; server.headersTimeout = 10000; server.keepAliveTimeout = 5000;
 (async function boot() {
   if (SB_URL) { try { const rows = await remote('GET', '?id=eq.db&select=data'); if (rows[0]) Object.assign(db, rows[0].data); console.log('database loaded from Supabase'); } catch (e) { console.error('remote load failed, refusing to start to avoid overwriting data:', e.message); process.exit(1); } }
-  admin = require('./admin')({ db, send, limited, ip, fpOf, sha, same, hash, save, cookie, HTTPS, metrics, dbFile: DB_FILE, remote: !!SB_URL });
+  if (!Array.isArray(db.missions)) { db.missions = defaultMissions(); save(); }
+  admin = require('./admin')({ db, send, limited, ip, fpOf, sha, same, hash, save, cookie, HTTPS, metrics, dbFile: DB_FILE, remote: !!SB_URL, missionTypes: Object.fromEntries(Object.entries(MISSION_METRICS).map(([k, v]) => [k, v.label])) });
   server.listen(PORT, () => console.log('http://localhost:' + PORT + (admin.enabled ? ' (admin on)' : '')));
 })();

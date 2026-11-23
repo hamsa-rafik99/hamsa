@@ -107,7 +107,7 @@ document.addEventListener('click', e => {
   if (b.dataset.act === 'theme') { localStorage.setItem('theme', theme() === 'dark' ? 'light' : 'dark'); document.documentElement.dataset.theme = theme(); document.querySelectorAll('.mlab').forEach(s => s.textContent = theme() === 'dark' ? 'الوضع الفاتح' : 'الوضع الداكن'); }
   if (b.dataset.act === 'out') api('/logout', 'POST').finally(() => { location.hash = '#/'; location.reload(); });
   if (b.dataset.act === 'inv') invitePanel();
-  if (b.dataset.act === 'share') navigator.share({ title: SITE, text: b.dataset.stext || ('سجّل على ' + SITE + ' واستقبل رسايل مجهولة'), url: b.dataset.text }).catch(() => {});
+  if (b.dataset.act === 'share') { navigator.share({ title: SITE, text: b.dataset.stext || ('سجّل على ' + SITE + ' واستقبل رسايل مجهولة'), url: b.dataset.text }).then(() => api('/event', 'POST', { t: 'share' }).catch(() => {})).catch(() => {}); }
   if (b.dataset.act === 'copy') { const done = () => { const l = b.querySelector('span'); (l || b).textContent = 'تم النسخ ✓'; b.classList.add('done'); }; (navigator.clipboard ? navigator.clipboard.writeText(b.dataset.text).then(done, done) : done()); }
 });
 
@@ -127,6 +127,7 @@ async function route() {
     if (h === '/inbox') return pageInbox();
     if (h === '/follow') return pageFollow();
     if (h === '/settings') return pageSettings();
+    if (h === '/missions') return pageMissions();
     if (h === '/settings/invite') { await pageSettings(); const c = document.querySelector('.invite'); if (c) { c.scrollIntoView({ block: 'center' }); c.classList.add('flash'); } return; }
     if (h === '/login' || h === '/signup') return pageAuth(h === '/signup');
     if (h === '/forgot') return pageForgot();
@@ -223,10 +224,31 @@ async function pageThread(id) {
   $('#bl').onclick = async () => { if (confirm('تحظر المرسل ده؟ مش هيعرف إنه اتحظر.')) { await api(`/inbox/${id}/block`, 'POST'); location.hash = '#/inbox'; } };
   window.scrollTo(0, document.body.scrollHeight);
 }
+async function pageMissions() {
+  const u = await api('/me'), d = await api('/missions');
+  const seenSecrets = JSON.parse(localStorage.getItem('mseen') || '[]');
+  const freshSecret = d.missions.find(m => m.secret && m.done && !seenSecrets.includes(m.id));
+  const stageRows = m => `<div class="msts">${m.stages.map((s, i) => { const cur = !s.done && i === m.current; return `<div class="mst ${s.done ? 'done' : ''} ${cur ? 'cur' : ''}"><span class="msc">${s.done ? '✓' : nf(i + 1)}</span><div class="msb"><b>المرحلة ${nf(i + 1)} · هدف ${nf(s.target)}</b><span>${s.done ? 'خلصت' : cur ? `${nf(Math.min(m.prog, s.target))} / ${nf(s.target)}` : 'بتتفتح بعد اللي قبلها'}</span>${cur ? `<div class="mprog"><i style="width:${Math.min(100, Math.round(m.prog / s.target * 100))}%"></i></div>` : ''}</div><span class="msp">+${nf(s.pts)}</span></div>`; }).join('')}</div>`;
+  const oneBar = m => `<div class="mprog"><i style="width:${Math.min(100, Math.round(m.prog / m.stages[0].target * 100))}%"></i></div>`;
+  const state = m => m.done ? '<span class="mstate ok">✓ خلصت</span>' : m.stages.length > 1 ? `<span class="mstate">${nf(m.current + 1)} / ${nf(m.stages.length)} مراحل</span>` : `<span class="mstate">${nf(m.prog)} / ${nf(m.stages[0].target)}</span>`;
+  const card = m => m.locked
+    ? `<div class="mcard secret"><div class="micon">؟</div><div class="mbody"><b>مهمة سرية</b><span>مقفولة لسه — هتتكشف لما تعملها بالصدفة</span></div></div>`
+    : `<div class="mcard ${m.done ? 'done' : ''} ${m.secret ? 'secret-open' : ''}"><div class="micon">${m.done ? '✓' : '★'}</div><div class="mbody"><b>${esc(m.title)}${m.secret ? ' <em class="mtag">سرية</em>' : ''}</b><span>${esc(m.desc)}</span>${m.stages.length > 1 ? stageRows(m) : oneBar(m)}</div><div class="mpts">+${nf(m.ptsTotal)}</div>${state(m)}</div>`;
+  const vis = d.missions.filter(m => !m.secret), sec = d.missions.filter(m => m.secret);
+  app.innerHTML = shell(`<div class="card center mhead"><p class="mut" style="margin:0">رصيدك الحالي</p><div class="mscore">${nf(d.points)}</div><p class="mut" style="margin:0">نقطة · استخدمها قريب في حاجات حلوة</p></div>
+  ${freshSecret ? `<div class="mcard banner" id="mb"><div class="micon">★</div><div class="mbody"><b>اكتشفت مهمة سرية: ${esc(freshSecret.title)}</b><span>+${nf(freshSecret.ptsTotal)} نقطة في رصيدك</span></div></div>` : ''}
+  <div class="msec">المهمات</div>
+  ${vis.map(card).join('')}
+  <div class="msec">مهمات سرية <span class="mut" style="font-weight:400">(${sec.filter(m => m.done).length} من ${sec.length} اتكشفت)</span></div>
+  ${sec.map(card).join('')}
+  <div class="center" style="margin:14px 0"><a class="mut" href="#/settings">→ رجوع للإعدادات</a></div>`, userMenu(u));
+  if (freshSecret) { seenSecrets.push(freshSecret.id); localStorage.setItem('mseen', JSON.stringify(seenSecrets)); }
+}
 async function pageSettings() {
   const u = await api('/me'), n = await api('/notify');
   const ch = (id, label, val, ph, live, need) => `<div class="chan"><b>${label}</b> <span class="badge">${live ? 'جاهز للإرسال الفعلي' : 'تجريبي محلي'}</span><input id="${id}" dir="ltr" value="${esc(val)}" placeholder="${ph}"><p class="mut" style="margin:-4px 0 4px;font-size:12px">${need}</p></div>`;
   app.innerHTML = shell(`<div class="card"><h1>الملف الشخصي</h1><form id="f"><div class="edit-cover" id="cv" ${u.cover ? `style="background-image:url(${u.cover});background-position:center ${u.covery ?? 50}%"` : ''}><div class="cvbar"><button type="button" class="btn sm ghost" id="rp" ${u.cover ? '' : 'disabled'}>تحديد الجزء الظاهر</button><label class="btn sm ghost">تغيير الغلاف<input type="file" id="cf" accept="image/*" hidden></label></div><div class="cvhint">اسحب الصورة لتحديد الجزء اللي يظهر</div><div class="cvact"><button type="button" class="btn sm" id="rok">حفظ التحديد</button><button type="button" class="btn sm ghost" id="rno">إلغاء</button></div></div><div class="row" style="align-items:center;margin:-34px 14px 10px">${av(u, 'big')}<label class="btn sm ghost" style="margin-top:34px">صورة شخصية<input type="file" id="af" accept="image/*" hidden></label><button type="button" class="btn sm ghost" id="rm" style="margin-top:34px">إزالة الصور</button></div><input id="nm" value="${esc(u.name)}" placeholder="الاسم"><textarea id="bio" maxlength="200" placeholder="نبذة عنك (٢٠٠ حرف)" style="min-height:80px">${esc(u.bio)}</textarea><label class="row" style="margin-bottom:12px"><input type="checkbox" id="op" ${u.open ? 'checked' : ''} style="width:auto;margin:0"> استقبل رسايل جديدة</label><button class="btn full">حفظ الملف</button></form></div>
+  <div class="card center" id="msum" style="cursor:pointer"><h1 style="font-size:20px">المهمات</h1><p class="sub">كمّل مهمات واكسب نقاط، وفي مهمات سرية هتكتشفها بالصدفة.</p><div class="mscore" id="msc">…</div><a class="btn full ghost" href="#/missions">افتح المهمات</a></div>
   <div class="card"><h1 style="font-size:20px">الإشعارات</h1><p class="sub">هنبعتلك تنبيه لما توصلك رسالة أو رد جديد (من غير ما نكتب نص الرسالة، بس لينك).</p><form id="nf">
   ${ch('ne', 'إيميل / Gmail', n.email, 'name@gmail.com', n.live.email, 'يحتاج مفتاح خدمة إرسال إيميل (Resend أو SMTP) ودومين مُرسِل')}
   <label class="row" style="margin:-2px 0 12px"><input type="checkbox" id="nen" ${n.nEmail ? 'checked' : ''} style="width:auto;margin:0"> فعّل إشعارات الإيميل</label>
@@ -237,6 +259,7 @@ async function pageSettings() {
   <p class="err" id="ner"></p><div class="row"><button class="btn">حفظ الإشعارات</button><button type="button" class="btn ghost" id="tst">إشعار تجريبي</button></div></form><p class="mut" id="nok" style="margin:8px 0 0"></p>
   <p style="margin:12px 0 0"><a class="mut" href="#/outbox">شوف الرسايل اللي اتجهزت (للتجربة المحلية)</a></p></div>
   <div class="card"><h1 style="font-size:20px">تغيير كلمة السر</h1><form id="pf"><input id="po" type="password" dir="ltr" placeholder="كلمة السر الحالية"><input id="pn" type="password" dir="ltr" placeholder="كلمة السر الجديدة"><p class="err" id="per"></p><button class="btn full ghost">تغيير</button></form></div><a href="#/inbox" class="mut">→ رجوع</a>`, userMenu(u));
+  api('/missions').then(d => { $('#msc').textContent = nf(d.points) + ' نقطة'; }).catch(() => { $('#msc').textContent = ''; });
   const pend = {};
   const shrink = (file, w, h) => new Promise(ok => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'), r = Math.max(w / im.width, h / im.height); g.drawImage(im, (w - im.width * r) / 2, (h - im.height * r) / 2, im.width * r, im.height * r); ok(c.toDataURL('image/jpeg', .82)); }; im.src = URL.createObjectURL(file); });
   $('#af').onchange = async e => { if (e.target.files[0]) { pend.avatar = await shrink(e.target.files[0], 256, 256); const el = document.querySelector('.av.big'); el.outerHTML = `<img class="av big" src="${pend.avatar}">`; } };

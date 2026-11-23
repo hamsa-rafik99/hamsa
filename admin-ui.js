@@ -9,9 +9,9 @@ async function pageAdmin(tab = 'overview') {
   clearInterval(adminTimer);
   let ov;
   try { ov = await aapi('/overview'); } catch (e) { return adminLogin(); }
-  const tabs = [['overview', 'نظرة عامة', '◈'], ['users', 'المستخدمين', '☻'], ['signups', 'التسجيلات والدعوات', '⇪'], ['reports', 'البلاغات', '⚑'], ['settings', 'الإعدادات', '⚙'], ['log', 'سجل النشاط', '≡']];
+  const tabs = [['overview', 'نظرة عامة', '◈'], ['users', 'المستخدمين', '☻'], ['signups', 'التسجيلات والدعوات', '⇪'], ['missions', 'المهمات', '★'], ['reports', 'البلاغات', '⚑'], ['settings', 'الإعدادات', '⚙'], ['log', 'سجل النشاط', '≡']];
   const nav = tabs.map(([k, l, ic]) => `<a class="${k === tab ? 'on' : ''}" href="#/admin/${k}"><i>${ic}</i><span>${l}</span>${k === 'reports' && ov.reports + ov.flagged ? ` <em class="badge bad">${num(ov.reports + ov.flagged)}</em>` : ''}</a>`).join('');
-  const body = await ({ overview: adminOverview, users: adminUsers, signups: adminSignups, reports: adminReports, settings: adminSettings, log: adminLog }[tab] || adminOverview)(ov);
+  const body = await ({ overview: adminOverview, users: adminUsers, signups: adminSignups, missions: adminMissions, reports: adminReports, settings: adminSettings, log: adminLog }[tab] || adminOverview)(ov);
   app.innerHTML = shell(`<div class="adm"><aside class="aside"><div class="abrand">لوحة التحكم</div><nav>${nav}</nav><button class="btn sm ghost" id="alo">تسجيل خروج</button></aside><main class="amain">${body.html}</main></div>`);
   $('#alo').onclick = async () => { clearInterval(adminTimer); await aapi('/logout', 'POST'); location.hash = '#/admin'; };
   body.bind && body.bind();
@@ -129,6 +129,45 @@ async function adminSettings() {
 
 async function adminLog() {
   const { log } = await aapi('/log');
-  const names = { signup: 'حساب جديد', admin_login: 'دخول أدمن', admin_login_failed: 'محاولة دخول فاشلة', user_ban: 'إيقاف حساب', user_unban: 'رفع إيقاف', user_deleted: 'حذف حساب', thread_reported: 'بلاغ على محادثة', report_dismissed: 'تجاهل بلاغ', thread_deleted: 'حذف محادثة', sender_banned: 'حظر مرسل', settings_changed: 'تغيير إعدادات' };
+  const names = { signup: 'حساب جديد', admin_login: 'دخول أدمن', admin_login_failed: 'محاولة دخول فاشلة', user_ban: 'إيقاف حساب', user_unban: 'رفع إيقاف', user_deleted: 'حذف حساب', thread_reported: 'بلاغ على محادثة', report_dismissed: 'تجاهل بلاغ', thread_deleted: 'حذف محادثة', sender_banned: 'حظر مرسل', settings_changed: 'تغيير إعدادات', mission_created: 'مهمة جديدة', mission_updated: 'تعديل مهمة', mission_deleted: 'حذف مهمة' };
   return { html: `<h1>سجل النشاط</h1><div class="card">${log.length ? log.map(l => `<div class="lrow"><span>${esc(names[l.kind] || l.kind)} <span class="mut" dir="ltr">${esc(l.detail)}</span></span><span class="mut">${time(l.t)}</span></div>`).join('') : '<div class="empty">السجل فاضي</div>'}</div>` };
+}
+
+let editMissionId = null; // null = closed, '' = new mission form, otherwise the mission id being edited
+async function adminMissions() {
+  const d = await aapi('/missions');
+  const stageLine = ms => ms.stages.map(s => `${num(s.target)} ← ${num(s.pts)} نقطة`).join(' · ');
+  const form = ms => `<form id="mf">
+    <label class="mut">اسم المهمة</label><input id="mt" maxlength="60" value="${ms ? esc(ms.title) : ''}">
+    <label class="mut">الوصف (اختياري)</label><input id="md" maxlength="200" value="${ms ? esc(ms.desc || '') : ''}">
+    <label class="mut">نوع الشرط</label><select id="mty">${Object.entries(d.types).map(([k, v]) => `<option value="${k}" ${ms && ms.type === k ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>
+    <label class="row" style="margin:10px 0"><input type="checkbox" id="mac" ${!ms || ms.active !== false ? 'checked' : ''} style="width:auto;margin:0"> المهمة مفعّلة</label>
+    <label class="row" style="margin-bottom:10px"><input type="checkbox" id="mse" ${ms && ms.secret ? 'checked' : ''} style="width:auto;margin:0"> مهمة سرية (بتتكشف بالصدفة، مش بتظهر قبلها)</label>
+    <label class="mut">المراحل بالترتيب: الهدف تراكمي من بداية المهمة، وكل مكافأة بتتضاف مرة واحدة</label>
+    <div id="mst">${(ms ? ms.stages : [{ target: 5, pts: 5 }]).map(s => `<div class="stg row"><input type="number" class="stgt" min="1" placeholder="الهدف" value="${s.target}" style="flex:1"><input type="number" class="stgp" min="1" placeholder="النقاط" value="${s.pts}" style="flex:1"><button type="button" class="btn sm ghost" data-rm>✕</button></div>`).join('')}</div>
+    <button type="button" class="btn sm ghost" id="madd" style="margin-bottom:10px">+ أضف مرحلة</button>
+    <div class="err" id="merr"></div><div class="row"><button class="btn">${ms ? 'حفظ المهمة' : 'إنشاء المهمة'}</button><button type="button" class="btn ghost" id="mcancel">إلغاء</button></div></form>`;
+  const editing = editMissionId ? d.missions.find(x => x.id === editMissionId) : null;
+  const formOpen = editing || editMissionId === '';
+  const list = d.missions.map(ms => `<div class="urow"><div><b>${esc(ms.title)}</b> ${ms.secret ? '<span class="badge bad">سرية</span>' : '<span class="badge">ظاهرة</span>'}${ms.active === false ? ' <span class="badge">متوقفة</span>' : ''}<div class="mut">${esc(d.types[ms.type] || ms.type)}${ms.desc ? ' — ' + esc(ms.desc) : ''}</div><div class="mut">${stageLine(ms)}</div></div>
+    <div class="row"><button class="btn sm ghost" data-e="${esc(ms.id)}">تعديل</button><button class="btn sm ghost" data-d="${esc(ms.id)}">حذف</button></div></div>`).join('');
+  const html = `<h1>المهمات</h1><p class="mut">اعمل مهمات عادية أو سرية وحدد مراحلها ومكافآتها. السرية بتظهر للمستخدم «؟؟؟» لحد ما يكتشفها، وأنت شايفها هنا بكل تفاصيلها.</p>
+  ${formOpen ? `<div class="card">${form(editing)}</div>` : ''}
+  <div class="card"><div class="row" style="justify-content:space-between;align-items:center"><h2 style="margin:0">المهمات الحالية (${num(d.missions.length)})</h2><button class="btn sm" id="mnew">+ مهمة جديدة</button></div><div style="margin-top:10px">${list || '<div class="empty">مفيش مهمات</div>'}</div></div>`;
+  return { html, bind() {
+    $('#mnew').onclick = () => { editMissionId = ''; pageAdmin('missions'); };
+    app.querySelectorAll('[data-e]').forEach(b => b.onclick = () => { editMissionId = b.dataset.e; pageAdmin('missions'); });
+    app.querySelectorAll('[data-d]').forEach(b => b.onclick = async () => { if (confirm('تحذف المهمة دي نهائياً؟')) { await aapi('/missions/' + b.dataset.d, 'DELETE'); pageAdmin('missions'); } });
+    if (!formOpen) return;
+    $('#madd').onclick = () => $('#mst').insertAdjacentHTML('beforeend', `<div class="stg row"><input type="number" class="stgt" min="1" placeholder="الهدف" style="flex:1"><input type="number" class="stgp" min="1" placeholder="النقاط" style="flex:1"><button type="button" class="btn sm ghost" data-rm>✕</button></div>`);
+    $('#mst').onclick = e => { const b = e.target.closest('[data-rm]'); if (b && app.querySelectorAll('.stg').length > 1) b.closest('.stg').remove(); };
+    $('#mcancel').onclick = () => { editMissionId = null; pageAdmin('missions'); };
+    $('#mf').onsubmit = async e => {
+      e.preventDefault();
+      const stages = [...app.querySelectorAll('.stg')].map(rw => ({ target: Number(rw.querySelector('.stgt').value), pts: Number(rw.querySelector('.stgp').value) }));
+      const body = { title: $('#mt').value, desc: $('#md').value, type: $('#mty').value, active: $('#mac').checked, secret: $('#mse').checked, stages };
+      try { if (editing) await aapi('/missions/' + editing.id, 'PUT', body); else await aapi('/missions', 'POST', body); editMissionId = null; pageAdmin('missions'); }
+      catch (x) { $('#merr').textContent = x.message; }
+    };
+  } };
 }
