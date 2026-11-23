@@ -242,7 +242,7 @@ function profilePage(handle) {
   const name = u ? (u.name || handle) : handle;
   const title = u ? `صارح ${name} وتابع الردود في ${S}` : `${S} — رسايل مجهولة`;
   const desc = u ? `ابعت رسالة مجهولة لـ ${name} — من غير اسم ولا حساب — وهو يرد عليك وانت متابع من نفس اللينك.` : 'منصة عربية للرسائل المجهولة: شارك رابطك واستقبل رسايل بدون أسماء ورد عليها.';
-  const img = u && u.ogimg ? `${BASE}/og/u/${handle}` : `${BASE}/og.png`;
+  const img = u && (sharp || u.ogimg) ? `${BASE}/og/u/${handle}` : `${BASE}/og.png`;
   const page = `${BASE}/u/${handle}`, spa = `/#/u/${handle}`;
   const m = (k, v, p) => `<meta ${p ? 'property' : 'name'}="${k}" content="${escHtml(v)}">`;
   return `<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>${escHtml(title)}</title>
