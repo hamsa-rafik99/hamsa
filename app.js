@@ -153,6 +153,15 @@ async function pageHome() {
   <div class="hvis" aria-hidden="true"><div class="phone"><div class="pt">محادثة مجهولة</div><div class="chat"><div class="b mine">محتواك حلو جدًا، كمل كده 😄<small>مجهول</small></div><div class="b theirs">ميرسي ليك! مين حضرتك؟ 😄<small>رد من صاحب الصفحة</small></div><div class="b mine">سر 😉 بس متابعك من زمان<small>مجهول</small></div></div></div></div></section>
   <section class="sec"><h2>إزاي بتشتغل؟</h2><div class="grid3">${step(1, 'اعمل صفحتك', 'سجّل في ثواني واحصل على لينك خاص بيك.')}${step(2, 'شارك اللينك', 'حطه في الستوري أو البايو، وأي حد يقدر يبعتلك رسالة من غير اسم.')}${step(3, 'اقرا وردّ', 'الرسايل بتوصلك، وإنت تردّ، والمرسل يتابع الرد بكود خاص بيه.')}</div></section>
   <section class="sec alt"><h2>ليه ${S}؟</h2><div class="grid4">${feat('✉', 'ردود بشكل شات', 'محادثة حديثة بفقاعات، مش مجرد رسايل منفصلة.')}${feat('✓', 'كود متابعة للمرسل', 'المرسل يفضل مجهول وياخد كود يرجع بيه يشوف الرد.')}${feat('★', 'شارك كصورة', `حوّل المحادثة لصورة عليها اسم ${S} وانشرها على السوشيال.`)}${feat('♥', 'إشعارات', 'تنبيه لما توصلك رسالة، من غير ما نكتب نص الرسالة فيه.')}${feat('✎', 'تحكم كامل', 'احظر، احذف، أو اقفل استقبال الرسايل في أي وقت.')}${feat('☺', 'بروفايل مميز', 'صورة وغلاف ونبذة وإحصائيات لصفحتك.')}</div></section>
+  <section class="sec alt"><h2 style="margin-bottom:2px">المهمات والنقاط</h2><p class="mut" style="text-align:center;margin:0 0 18px">كل حركة على ${S} بتتحسب ليك</p><div class="tmcard">
+  <div class="tmmini"><span class="tmic">★</span><div class="tmgrow"><b>استقبل رسايل على صفحتك</b><span>كل خطوة ليها مكافأة</span></div><span class="tmpts">+١٠</span></div>
+  <div class="tmmini"><span class="tmic">★</span><div class="tmgrow"><b>ادعُ أصحابك</b><span>مراحل بتتفتح واحدة ورا التانية</span></div><span class="tmpts">+٥٠</span></div>
+  <div class="tmmini"><span class="tmic">★</span><div class="tmgrow"><b>كمّل ملفك وانشر لينكك</b><span>نقط سهلة من أول يوم</span></div><span class="tmpts">+٢٥</span></div>
+  <div class="tmlock"><span class="tmq">؟؟؟</span><div class="tmgrow"><b>مهمات مخفية</b><span>محدش يعرفها... هتتكشف لو عملتها بالصدفة</span></div></div>
+  <div class="tmlock"><span class="tmq">؟؟؟</span><div class="tmgrow"><b>مهمات مخفية</b><span>وفي كمان، وكمان...</span></div></div>
+  <div class="tmhook">كن أول واحد يكتشف المهمات المخفية ☝️</div>
+  <p class="mut" style="text-align:center;font-size:13px;margin:4px 0 10px">سجل دلوقتي وابدأ اكسب نقط</p>
+  <a class="btn big full" href="#/signup" style="display:block;text-align:center">اعمل صفحتك مجاناً</a></div></section>
   <section class="sec"><div class="endcta"><h2>جاهز تبدأ؟</h2><p>الحساب مجاني وبياخد أقل من دقيقة.</p><a class="btn big" href="#/signup">ابدأ دلوقتي</a></div></section>
   <footer class="lfoot">${S} · رسايل مجهولة بكل احترام</footer></div>`;
   $('#ff').onsubmit = e => { e.preventDefault(); if ($('#fc').value.trim()) location.hash = '#/t/' + $('#fc').value.trim().toUpperCase(); };

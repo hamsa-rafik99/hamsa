@@ -233,3 +233,16 @@ textarea{resize:none}
 .mst .msb{flex:1;min-width:0}.mst .msb b{font-size:13px}.mst .msb span{display:block;font-size:12px;color:var(--mut)}
 .mst .msp{font-weight:800;color:var(--p);font-size:13px;white-space:nowrap}
 .stg{margin-bottom:8px}.stg input{margin:0}
+
+/* v15.2: homepage missions teaser */
+.tmcard{background:var(--card);border-radius:22px;padding:18px;box-shadow:0 4px 18px var(--shadow)}
+.sec.alt .tmcard{background:var(--soft2);box-shadow:none}
+.tmmini{display:flex;align-items:center;gap:10px;padding:10px 0;border-top:1px solid var(--line);font-size:13px}
+.tmmini:first-of-type{border:0;padding-top:2px}
+.tmic{width:32px;height:32px;border-radius:10px;background:var(--soft);display:grid;place-items:center;color:var(--p);font-size:16px;flex:none}
+.sec.alt .tmic{background:var(--card)}
+.tmgrow{flex:1;min-width:0}.tmgrow b{font-size:14px}.tmgrow span{display:block;font-size:12px;color:var(--mut)}
+.tmpts{font-weight:800;color:var(--p);font-size:14px;white-space:nowrap}
+.tmlock{background:var(--card);border-radius:14px;padding:12px;display:flex;align-items:center;gap:10px;margin-top:10px;border:1.5px dashed var(--line)}
+.tmq{font-size:20px;letter-spacing:4px;font-weight:800;color:var(--mut)}
+.tmhook{margin-top:14px;text-align:center;font-weight:800;font-size:16.5px;background:linear-gradient(90deg,var(--p),var(--p2));-webkit-background-clip:text;background-clip:text;color:transparent}
