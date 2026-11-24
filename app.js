@@ -40,7 +40,7 @@ async function invitePanel() {
   d.onclick = e => { if (e.target === d || e.target.closest('[data-act=x]')) d.remove(); };
 }
 let timer;
-const plane = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>`;
+const plane = `<svg width="26" height="26" aria-hidden="true" focusable="false" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 2 11 13"/><path d="M22 2 15 22l-4-9-9-4z"/></svg>`;
 function bubbles(msgs, ownerView, ownerName, ownerAv) {
   let prev = null;
   const rows = msgs.map(m => { const o = m.from === 'owner'; const mine = ownerView ? o : !o; const cont = prev === m.from; prev = m.from;
@@ -454,4 +454,4 @@ async function pageStoryCompose(){
  const setmode=m=>{mode=m;$('#stextbox').hidden=m!=='text';$('#simagebox').hidden=m!=='image';$('#stext').classList.toggle('ghost',m!=='text');$('#simage').classList.toggle('ghost',m!=='image');update()};$('#stext').onclick=()=>setmode('text');$('#simage').onclick=()=>setmode('image');
  $('#storyfile').onchange=async()=>{const f=$('#storyfile').files[0];if(!f)return;try{if(f.size>5e6||!['image/jpeg','image/png','image/webp'].includes(f.type))throw Error('اختار صورة JPG أو PNG أو WebP أقل من ٥ ميجا');let bitmap;for(let attempt=0;attempt<3;attempt++){try{bitmap=await createImageBitmap(f);break}catch(e){if(attempt===2)throw Error('تعذر قراءة الصورة، جرب صورة تانية');await new Promise(r=>setTimeout(r,300))}}const scale=Math.min(1,1080/Math.max(bitmap.width,bitmap.height)),c=document.createElement('canvas');c.width=Math.round(bitmap.width*scale);c.height=Math.round(bitmap.height*scale);c.getContext('2d').drawImage(bitmap,0,0,c.width,c.height);bitmap.close();let q=.8,data;do{data=c.toDataURL('image/webp',q);q-=.1}while(data.length>330000&&q>.25);if(data.length>330000)throw Error('الصورة كبيرة، جرب صورة أصغر');image=data;update();$('#serror').textContent=''}catch(e){$('#serror').textContent=e.message}};
  $('#spublish').onclick=async()=>{const b=$('#spublish');b.disabled=true;try{await api('/stories','POST',mode==='image'?{image}:{text:$('#storytext').value,color});location.hash='#/inbox'}catch(e){$('#serror').textContent=e.message;b.disabled=false}};
-  }
+                                                                                                                                                                          }
