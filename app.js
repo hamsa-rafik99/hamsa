@@ -187,10 +187,34 @@ async function pageAuth(signupFirst) {
   if (user) { location.hash = '#/inbox'; return; }
   app.innerHTML = shell(`<div class="card center"><div class="avatar">ه</div><h1>${esc(SITE)}</h1><p class="sub">استقبل رسايل من أصحابك من غير ما يظهر اسمهم. وتقدر ترد عليهم، وهم يتابعوا الرد بكود خاص.</p>
   <div class="tabs"><button class="btn full" id="tl">دخول</button><button class="btn full ghost" id="ts">حساب جديد</button></div>
-  <form id="f"><input id="un" placeholder="اسم المستخدم أو الإيميل" dir="ltr" autocomplete="username" autocapitalize="none" spellcheck="false"><input id="nm" placeholder="الاسم اللي هيظهر" style="display:none"><input id="em" type="email" dir="ltr" placeholder="الإيميل (لاسترجاع كلمة السر والإشعارات)" style="display:none"><input id="pw" type="password" placeholder="كلمة السر" dir="ltr" autocomplete="current-password"><p class="mut">باستخدامك الخدمة، اقرأ <a href="/terms">قواعد الاستخدام</a> و<a href="/privacy">سياسة الخصوصية</a>.</p><p class="err" id="er"></p><button class="btn full" id="go">دخول</button><p style="margin:12px 0 0"><a href="#/forgot" id="fg" class="mut">نسيت كلمة السر؟</a></p></form></div>
+  <form id="f" class="auth-form" method="post">
+  <div class="auth-field"><label for="un" id="username-label">اسم المستخدم أو الإيميل</label><input id="un" name="username" type="text" dir="ltr" autocomplete="username" autocapitalize="none" spellcheck="false" required maxlength="100" aria-describedby="username-help"><p class="auth-help" id="username-help">ادخل باسم المستخدم أو الإيميل المرتبط بحسابك.</p></div>
+  <div class="auth-field" id="display-name-field" hidden><label for="nm">الاسم الظاهر <span class="mut">(اختياري)</span></label><input id="nm" name="displayName" type="text" dir="auto" autocomplete="nickname" maxlength="40" disabled placeholder="مثال: رفيق"><p class="auth-help">ده الاسم اللي الناس هتشوفه على صفحتك، مش عنوان إيميل.</p></div>
+  <div class="auth-field" id="email-field" hidden><label for="em">البريد الإلكتروني <span class="mut">(اختياري)</span></label><input id="em" name="email" type="email" dir="ltr" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="100" disabled placeholder="you@example.com"><p class="auth-help">لاسترجاع كلمة السر. مش بيظهر على صفحتك.</p></div>
+  <div class="auth-field"><label for="pw">كلمة السر</label><input id="pw" name="password" type="password" dir="ltr" autocomplete="current-password" required maxlength="200" aria-describedby="password-help"><p class="auth-help" id="password-help" hidden>من ٦ لـ ٢٠٠ حرف. استخدم كلمة سر مختلفة عن إيميلك.</p></div>
+  <p class="mut">باستخدامك الخدمة، اقرأ <a href="/terms">قواعد الاستخدام</a> و<a href="/privacy">سياسة الخصوصية</a>.</p><p class="err" id="er" role="alert"></p><button class="btn full" id="go">دخول</button><p style="margin:12px 0 0"><a href="#/forgot" id="fg" class="mut">نسيت كلمة السر؟</a></p></form></div>
   <div class="card center"><p class="sub" style="margin:0">معاك كود رسالة بعتها قبل كده؟</p><a class="btn ghost sm" href="#/follow" style="margin-top:8px">تابع الردود</a></div><p class="center" style="margin:8px 0 0"><a class="mut" href="#/">→ الصفحة الرئيسية</a></p>`);
-  let signup = false; const set = s => { signup = s; $('#nm').style.display = $('#em').style.display = s ? '' : 'none'; $('#fg').style.display = s ? 'none' : ''; $('#un').placeholder = s ? 'اسم المستخدم (إنجليزي)' : 'اسم المستخدم أو الإيميل'; $('#go').textContent = s ? 'إنشاء حساب' : 'دخول'; $('#tl').classList.toggle('ghost', s); $('#ts').classList.toggle('ghost', !s); };
-  $('#tl').onclick = () => set(false); $('#ts').onclick = () => set(true); if (signupFirst) set(true);
+  let signup = false;
+  const set = isSignup => {
+    if (signup !== isSignup) { $('#un').value=''; $('#pw').value=''; $('#er').textContent=''; }
+    signup = isSignup;
+    $('#display-name-field').hidden = $('#email-field').hidden = !isSignup;
+    $('#nm').disabled = $('#em').disabled = !isSignup;
+    $('#fg').hidden = isSignup;
+    $('#username-label').textContent = isSignup ? 'اسم المستخدم' : 'اسم المستخدم أو الإيميل';
+    $('#un').placeholder = isSignup ? 'مثال: rafik_99' : 'اسم المستخدم أو الإيميل';
+    $('#un').maxLength = isSignup ? 20 : 100;
+    $('#un').minLength = isSignup ? 3 : 1;
+    if (isSignup) $('#un').pattern='[A-Za-z0-9_]{3,20}'; else $('#un').removeAttribute('pattern');
+    $('#username-help').textContent = isSignup ? 'ده معرّفك في رابط صفحتك، مش إيميل. من ٣ لـ ٢٠ حرف إنجليزي أو رقم أو _، من غير مسافات.' : 'ادخل باسم المستخدم أو الإيميل المرتبط بحسابك.';
+    $('#pw').autocomplete = isSignup ? 'new-password' : 'current-password';
+    $('#pw').minLength = isSignup ? 6 : 1;
+    $('#password-help').hidden = !isSignup;
+    $('#go').textContent = isSignup ? 'إنشاء حساب' : 'دخول';
+    $('#tl').classList.toggle('ghost', isSignup); $('#ts').classList.toggle('ghost', !isSignup);
+    $('#tl').setAttribute('aria-pressed', String(!isSignup)); $('#ts').setAttribute('aria-pressed', String(isSignup));
+  };
+  $('#tl').onclick = () => set(false); $('#ts').onclick = () => set(true); set(!!signupFirst);
   $('#f').onsubmit = async e => { e.preventDefault(); try { await api(signup ? '/signup' : '/login', 'POST', { username: $('#un').value, name: $('#nm').value, email: $('#em').value, password: $('#pw').value, ref: sessionStorage.getItem('ref') || '' }); location.hash = '#/inbox'; } catch (x) { $('#er').textContent = x.message; } };
 }
 async function pageSend(un) {
