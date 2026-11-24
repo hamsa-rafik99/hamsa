@@ -11,7 +11,12 @@ const BASE = process.env.BASE_URL || 'http://localhost:' + PORT;
 const HTTPS = BASE.startsWith('https://');
 const DEV_OUTBOX = process.env.DEV_OUTBOX ? process.env.DEV_OUTBOX !== '0' : !HTTPS; // local testing mailbox; off in production
 let saveTimer;
-const EMAIL_READY = process.env.EMAIL_ENABLED === '1' && !!process.env.RESEND_API_KEY && !!process.env.MAIL_FROM;
+const {emailConfig,sendEmail}=require('./email-provider');
+const EMAIL_CONFIG=emailConfig();
+const EMAIL_READY=EMAIL_CONFIG.ready;
+// Recovery approval does not opt existing users into notification emails.
+const NOTIFY_EMAIL_READY=EMAIL_READY&&process.env.EMAIL_NOTIFICATIONS_ENABLED==='1';
+const EMAIL_DAILY_CAP=250; // headroom below Brevo free 300/day; includes failed/ambiguous attempts
 const WA_READY = process.env.WHATSAPP_ENABLED === '1' && !!process.env.WHATSAPP_TOKEN && !!process.env.WHATSAPP_PHONE_ID && !!process.env.WHATSAPP_TEMPLATE && !!process.env.WHATSAPP_API_VERSION;
 const publicPages = require('./public-pages');
 const SB_URL = (process.env.SUPABASE_URL || '').replace(/\s+/g, '').replace(/\/$/, ''), SB_KEY = (process.env.SUPABASE_SERVICE_KEY || '').replace(/\s+/g, '');
@@ -101,8 +106,11 @@ async function deliver(channel, to, subject, text) {
   const e = { id: rid(6), t: Date.now(), channel, to, subject, text, status: 'محفوظ محلياً (لم يُرسل فعلياً)' };
   try {
     if (channel === 'email' && EMAIL_READY) {
-      const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json', 'Idempotency-Key': 'hamsa/'+e.id }, signal: AbortSignal.timeout(10000), body: JSON.stringify({ from: process.env.MAIL_FROM, to: [to], subject, text }) });
-      e.status = r.ok ? 'قَبِل المزوّد طلب الإرسال' : 'فشل الإرسال'; e.accepted = r.ok;
+      const emailBudget=(db.emailBudget||db.outbox.filter(e=>e.channel==='email').map(e=>e.t)).filter(t=>t>Date.now()-86400e3);
+      if(emailBudget.length>=EMAIL_DAILY_CAP)throw new Error('email budget reached');
+      emailBudget.push(Date.now()); db.emailBudget=emailBudget; save(); // reserve synchronously, never auto-retry an ambiguous send
+      e.accepted=await sendEmail({to,subject,text,id:e.id},EMAIL_CONFIG);
+      e.status=e.accepted?'قَبِل المزوّد طلب الإرسال':'فشل الإرسال';
     } else if (channel === 'telegram' && process.env.TELEGRAM_BOT_TOKEN) {
       const r = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, { method: 'POST', signal:AbortSignal.timeout(10000), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: to, text: subject + '\n' + text }) });
       e.status = r.ok ? 'قَبِل المزوّد طلب الإرسال' : 'فشل الإرسال'; e.accepted = r.ok;
@@ -117,7 +125,7 @@ function notify(u, kind, text) {
   const n = u.notify || {}; if (kind === 'new' && n.onMessage === false) return; if (kind === 'follow' && n.onFollowup === false) return;
   const subject = kind === 'new' ? 'وصلتك رسالة مجهولة جديدة' : 'وصلك رد جديد في محادثة مجهولة';
   const body = text + '\n' + BASE + '/#/inbox';   // message text is NOT included, only a link
-  if (n.email && u.email) deliver('email', u.email, subject, body);
+  if ((NOTIFY_EMAIL_READY || DEV_OUTBOX) && n.email && u.email) deliver('email', u.email, subject, body);
   if (n.telegram) deliver('telegram', n.telegram, subject, body);
   if (n.whatsapp) deliver('whatsapp', n.whatsapp, subject, body);
 }
@@ -128,7 +136,7 @@ async function api(req, res, url) {
   let r;
   const b = (m === 'POST' || m === 'PUT' || m === 'PATCH') ? await body(req) : {};
   if(p.startsWith('/api/stories')) return stories.handle(req,res,p,m,b);
-  if (p === '/api/capabilities' && m === 'GET') return send(res,200,{emailRecovery:EMAIL_READY,channels:{email:EMAIL_READY,whatsapp:WA_READY,telegram:!!process.env.TELEGRAM_BOT_TOKEN}});
+  if (p === '/api/capabilities' && m === 'GET') return send(res,200,{emailRecovery:EMAIL_READY,channels:{email:NOTIFY_EMAIL_READY,whatsapp:WA_READY,telegram:!!process.env.TELEGRAM_BOT_TOKEN}});
   if (p === '/api/config') return send(res, 200, { name: db.settings.siteName || SITE_NAME });
   if (p.startsWith('/api/admin/')) return admin.handle(req, res, p, m, b);
   if (p === '/api/signup' && m === 'POST') {
@@ -213,12 +221,12 @@ async function api(req, res, url) {
       u.email = em; u.notify = { email: !!b.nEmail && !!em, telegram: clean(b.telegram, 40).replace(/[^0-9-]/g, ''), whatsapp: clean(b.whatsapp, 20).replace(/[^0-9]/g, ''), onMessage: b.onMessage !== false, onFollowup: b.onFollowup !== false };
       save();
     }
-    return send(res, 200, { ...(u.notify || {}), email: u.email || '', nEmail: !!(u.notify || {}).email, live: { email: EMAIL_READY, telegram: !!process.env.TELEGRAM_BOT_TOKEN, whatsapp: WA_READY } });
+    return send(res, 200, { ...(u.notify || {}), email: u.email || '', nEmail: !!(u.notify || {}).email, live: { email: NOTIFY_EMAIL_READY, telegram: !!process.env.TELEGRAM_BOT_TOKEN, whatsapp: WA_READY } });
   }
   if (p === '/api/notify/test' && m === 'POST') {
     if (!u) return send(res, 401, { error: 'auth' });
     if(limited('ntest:'+u.username,3,3600e3))return send(res,429,{error:'استنى شوية قبل اختبار جديد'});
-    const jobs=[]; const n=u.notify||{}; if(n.email&&u.email&&EMAIL_READY)jobs.push(deliver('email',u.email,'اختبار إشعارات همسه',BASE+'/#/inbox')); if(n.whatsapp&&WA_READY)jobs.push(deliver('whatsapp',n.whatsapp,'اختبار إشعارات همسه',BASE+'/#/inbox')); if(n.telegram&&process.env.TELEGRAM_BOT_TOKEN)jobs.push(deliver('telegram',n.telegram,'اختبار إشعارات همسه',BASE+'/#/inbox')); const results=await Promise.all(jobs); return send(res,200,{attempted:results.length,accepted:results.filter(x=>x.accepted).length});
+    const jobs=[]; const n=u.notify||{}; if(n.email&&u.email&&NOTIFY_EMAIL_READY)jobs.push(deliver('email',u.email,'اختبار إشعارات همسه',BASE+'/#/inbox')); if(n.whatsapp&&WA_READY)jobs.push(deliver('whatsapp',n.whatsapp,'اختبار إشعارات همسه',BASE+'/#/inbox')); if(n.telegram&&process.env.TELEGRAM_BOT_TOKEN)jobs.push(deliver('telegram',n.telegram,'اختبار إشعارات همسه',BASE+'/#/inbox')); const results=await Promise.all(jobs); return send(res,200,{attempted:results.length,accepted:results.filter(x=>x.accepted).length});
   }
   if (p === '/api/dev/outbox') return DEV_OUTBOX ? send(res, 200, { outbox: db.outbox }) : send(res, 404, { error: 'off' });
   if (p === '/api/profile' && m === 'POST') {
