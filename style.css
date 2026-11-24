@@ -283,3 +283,6 @@ textarea{resize:none}
 
 .publicdoc>a:last-child{color:var(--p);display:inline-block;padding:12px 0}.publicdoc>.brand{display:block;margin-bottom:14px}
 @media(max-width:360px){.phone{width:min(280px,100%)}.lnav .row{gap:5px}.lnav .btn.sm{padding:6px 9px}.hcopy h1{font-size:30px}}
+
+/* Named authentication fields, labels stay visible after autofill. */
+.auth-form{text-align:start}.auth-field{margin:0 0 16px}.auth-field[hidden]{display:none}.auth-field label{display:block;font-weight:700;margin-bottom:7px}.auth-field label .mut{font-size:12px;font-weight:400}.auth-field input{margin-bottom:4px}.auth-help{font-size:12px;line-height:1.8;color:var(--mut);margin:0}.auth-form .err{min-height:0}.auth-form .mut a{color:var(--p2)}
