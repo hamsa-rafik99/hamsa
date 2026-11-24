@@ -309,7 +309,7 @@ async function pageSettings() {
 }
 async function pageForgot() {
   const cap=await api('/capabilities');
-  app.innerHTML = shell(`<div class="card center"><div class="avatar">؟</div><h1>نسيت كلمة السر؟</h1><p class="sub">استرجاع الحساب بالإيميل، لما خدمة الإرسال تكون مفعّلة.</p><form id="f"><input id="id" dir="ltr" placeholder="اسم المستخدم أو الإيميل"><p class="err" id="er"></p><button class="btn full">ابعتلي اللينك</button></form><p style="margin:12px 0 0"><a class="mut" href="#/login">→ رجوع للدخول</a></p></div>`);
+  app.innerHTML = shell(`<div class="card center"><div class="avatar">؟</div><h1>نسيت كلمة السر؟</h1><p class="sub">اكتب اسم المستخدم أو الإيميل المرتبط بحسابك. لو البيانات مطابقة، هنحاول نبعتلك لينك آمن لتغيير كلمة السر.</p><form id="f"><input id="id" dir="ltr" placeholder="اسم المستخدم أو الإيميل"><p class="err" id="er"></p><button class="btn full">ابعتلي اللينك</button></form><p style="margin:12px 0 0"><a class="mut" href="#/login">→ رجوع للدخول</a></p></div>`);
   if(!cap.emailRecovery){$('.card').insertAdjacentHTML('beforeend','<p class="notice" role="status">استرجاع كلمة السر بالإيميل مش متاح حالياً. مش هنبعت رسالة قبل تفعيل الخدمة.</p>');$('#f').querySelector('button').disabled=true;$('#id').disabled=true;}
   $('#f').onsubmit = async e => { e.preventDefault(); try { await api('/forgot', 'POST', { id: $('#id').value }); $('.card').innerHTML = `<div class="avatar">@</div><h1>تم</h1><p class="sub">لو الحساب موجود وعليه إيميل، هنحاول نبعت لينك الاسترجاع (صالح ساعة). مش هنقول إذا كان الحساب موجود ولا لأ، لحمايتك.</p><a class="btn ghost" href="#/login">رجوع</a>`; } catch (x) { $('#er').textContent = x.message; } };
 }
