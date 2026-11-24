@@ -35,9 +35,10 @@ const same = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(Strin
 const sha = v => crypto.createHash('sha256').update(String(v)).digest('hex');
 const DUMMY = { salt: 'x', pw: hash('dummy', 'x') }; // keeps login timing equal for unknown users
 const SESSION_MS = 30 * 864e5;
-const hits = {}; // simple rate limit
+const {clientIp,passwordError,makeLimiter}=require('./security');
+const hits = {}; // legacy cleanup placeholder; persistent HMAC counters are below
 setInterval(() => { const n = Date.now(); for (const k of Object.keys(hits)) { hits[k] = hits[k].filter(t => n - t < 36e5); if (!hits[k].length) delete hits[k]; } for (const [k, s] of Object.entries(db.sessions)) if (n - s.t > SESSION_MS) delete db.sessions[k]; for (const [k, r] of Object.entries(db.resets)) if (r.exp < n) delete db.resets[k]; }, 600e3).unref();
-const limited = (k, max, ms) => { const n = Date.now(); hits[k] = (hits[k] || []).filter(t => n - t < ms); if (hits[k].length >= max) return true; hits[k].push(n); return false; };
+const limited=makeLimiter(db,save);
 const SEC = { 'X-Content-Type-Options': 'nosniff', 'X-Frame-Options': 'DENY', 'Referrer-Policy': 'no-referrer', 'Cross-Origin-Opener-Policy': 'same-origin', 'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=()',
   'Content-Security-Policy': "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'",
   ...(HTTPS ? { 'Strict-Transport-Security': 'max-age=31536000; includeSubDomains' } : {}) };
@@ -96,7 +97,7 @@ const pub = u => ({ username: u.username, name: u.name, bio: u.bio, avatar: u.av
 // Real client address behind Render/Cloudflare. Used ONLY for rate limits and the hidden block fingerprint, never stored in the clear.
 let stories;
 let admin; // created in boot() after the database is loaded
-const ip = req => String(req.headers['cf-connecting-ip'] || (req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.socket.remoteAddress);
+const ip = req => clientIp(req);
 const fpOf = req => crypto.createHmac('sha256', db.secret).update(ip(req)).digest('hex').slice(0, 16);
 
 
@@ -143,7 +144,7 @@ async function api(req, res, url) {
     if (!db.settings.registrationOpen) return send(res, 403, { error: 'التسجيل مقفول مؤقتاً' });
     const un = clean(b.username, 20).toLowerCase();
     if (!/^[a-z0-9_]{3,20}$/.test(un)) return send(res, 400, { error: 'اسم المستخدم لازم يكون ٣ إلى ٢٠ حرف إنجليزي أو أرقام أو _' });
-    if (String(b.password || '').length < 6 || String(b.password).length > 200) return send(res, 400, { error: 'كلمة السر لازم تكون من ٦ لـ ٢٠٠ حرف' });
+    if(passwordError(b.password))return send(res,400,{error:passwordError(b.password)});
     if (limited('su' + ip(req), 10, 3600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
     if (db.users[un]) return send(res, 409, { error: 'اسم المستخدم ده مستخدم قبل كده' });
     const salt = rid(16);
@@ -155,7 +156,7 @@ async function api(req, res, url) {
   }
   if (p === '/api/login' && m === 'POST') {
     const idf = clean(b.username, 100).toLowerCase().replace(/^@/, ''), x = idf.includes('@') ? Object.values(db.users).find(q => q.email && q.email === idf) : db.users[idf], un = x ? x.username : idf.slice(0, 20);
-    if (limited('li' + ip(req) + idf, 8, 600e3) || limited('lu' + idf, 30, 3600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
+    if (limited('lip:' + ip(req), 40, 600e3) || limited('li:' + ip(req) + ':' + un, 8, 600e3) || limited('lu:' + un, 30, 3600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
     const y = x || DUMMY;
     if (!same(hash(b.password || '', y.salt), y.pw) || !x) { admin.bump('failedLogins'); return send(res, 401, { error: 'اسم المستخدم أو كلمة السر غلط' }); }
     if (x.banned) return send(res, 403, { error: 'الحساب ده موقوف' });
@@ -194,24 +195,28 @@ async function api(req, res, url) {
     const id = clean(b.id, 100).toLowerCase();
     if (limited('fg' + ip(req), 5, 3600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
     const x = db.users[id] || Object.values(db.users).find(q => q.email && q.email === id);
-    if (x && x.email) { for(const [k,v] of Object.entries(db.resets))if(v.u===x.username)delete db.resets[k]; const tok = rid(24); db.resets[crypto.createHash('sha256').update(tok).digest('hex')] = { u: x.username, exp: Date.now() + 3600e3 };
+    if (x && x.email && !limited('fguser:'+x.username,3,3600e3)) { for(const [k,v] of Object.entries(db.resets))if(v.u===x.username)delete db.resets[k]; const tok = rid(24); db.resets[crypto.createHash('sha256').update(tok).digest('hex')] = { u: x.username, exp: Date.now() + 3600e3 };
       deliver('email', x.email, 'استرجاع كلمة السر في همسه', 'ادخل على اللينك ده لتغيير كلمة السر (صالح لمدة ساعة):\n' + BASE + '/#/reset/' + tok + '\nلو مش أنت اللي طلبت، تجاهل الرسالة.'); }
     return send(res, 200, { ok: 1 }); // same answer whether or not the account exists
   }
   if (p === '/api/reset' && m === 'POST') {
     const k = crypto.createHash('sha256').update(String(b.token || '')).digest('hex'), r0 = db.resets[k];
     if (!r0 || r0.exp < Date.now()) return send(res, 400, { error: 'اللينك منتهي أو غير صحيح' });
-    if (String(b.password || '').length < 6 || String(b.password || '').length > 200) return send(res, 400, { error: 'كلمة السر لازم تكون ٦ حروف على الأقل' });
+    if(passwordError(b.password))return send(res,400,{error:passwordError(b.password)});
     const x = db.users[r0.u]; if(!x)return send(res,400,{error:'اللينك منتهي أو غير صحيح'}); x.salt = rid(16); x.pw = hash(b.password, x.salt); delete db.resets[k];
     for (const [sid, ss] of Object.entries(db.sessions)) if (ss.u === x.username) delete db.sessions[sid];
     save(); return send(res, 200, { ok: 1 });
   }
   if (p === '/api/password' && m === 'POST') {
     if (!u) return send(res, 401, { error: 'auth' });
+    if(limited('pw:'+u.username,10,3600e3))return send(res,429,{error:'محاولات كتير، جرب بعد شوية'});
     if (!same(hash(b.old || '', u.salt), u.pw)) return send(res, 400, { error: 'كلمة السر الحالية غلط' });
-    if (String(b.password || '').length < 6 || String(b.password).length > 200) return send(res, 400, { error: 'كلمة السر الجديدة لازم تكون من ٦ لـ ٢٠٠ حرف' });
-    if (limited('pw' + u.username, 10, 3600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
-    u.salt = rid(16); u.pw = hash(b.password, u.salt); save(); return send(res, 200, { ok: 1 });
+    if(passwordError(b.password))return send(res,400,{error:passwordError(b.password)});
+    u.salt = rid(16); u.pw = hash(b.password, u.salt);
+    const keep=sha(cookie(req).sid||'');
+    for(const [sid,ss] of Object.entries(db.sessions))if(ss.u===u.username&&sid!==keep)delete db.sessions[sid];
+    for(const [key,reset] of Object.entries(db.resets))if(reset.u===u.username)delete db.resets[key];
+    save(); return send(res, 200, { ok: 1 });
   }
   if (p === '/api/notify') {
     if (!u) return send(res, 401, { error: 'auth' });
