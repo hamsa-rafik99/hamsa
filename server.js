@@ -11,6 +11,9 @@ const BASE = process.env.BASE_URL || 'http://localhost:' + PORT;
 const HTTPS = BASE.startsWith('https://');
 const DEV_OUTBOX = process.env.DEV_OUTBOX ? process.env.DEV_OUTBOX !== '0' : !HTTPS; // local testing mailbox; off in production
 let saveTimer;
+const EMAIL_READY = process.env.EMAIL_ENABLED === '1' && !!process.env.RESEND_API_KEY && !!process.env.MAIL_FROM;
+const WA_READY = process.env.WHATSAPP_ENABLED === '1' && !!process.env.WHATSAPP_TOKEN && !!process.env.WHATSAPP_PHONE_ID && !!process.env.WHATSAPP_TEMPLATE && !!process.env.WHATSAPP_API_VERSION;
+const publicPages = require('./public-pages');
 const SB_URL = (process.env.SUPABASE_URL || '').replace(/\s+/g, '').replace(/\/$/, ''), SB_KEY = (process.env.SUPABASE_SERVICE_KEY || '').replace(/\s+/g, '');
 const remote = async (method, q, payload) => { const r = await fetch(SB_URL + '/rest/v1/kv' + q, { method, headers: { apikey: SB_KEY, ...(SB_KEY.startsWith('sb_') ? {} : { Authorization: 'Bearer ' + SB_KEY }), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates' }, body: payload ? JSON.stringify(payload) : undefined }); if (!r.ok) throw new Error('remote ' + r.status); return method === 'GET' ? r.json() : null; };
 let remoteBusy = false, remoteDirty = false;
@@ -97,18 +100,18 @@ const fpOf = req => crypto.createHmac('sha256', db.secret).update(ip(req)).diges
 async function deliver(channel, to, subject, text) {
   const e = { id: rid(6), t: Date.now(), channel, to, subject, text, status: 'محفوظ محلياً (لم يُرسل فعلياً)' };
   try {
-    if (channel === 'email' && process.env.RESEND_API_KEY && process.env.MAIL_FROM) {
-      const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: process.env.MAIL_FROM, to: [to], subject, text }) });
-      e.status = r.ok ? 'أُرسل' : 'فشل الإرسال';
+    if (channel === 'email' && EMAIL_READY) {
+      const r = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json', 'Idempotency-Key': 'hamsa/'+e.id }, signal: AbortSignal.timeout(10000), body: JSON.stringify({ from: process.env.MAIL_FROM, to: [to], subject, text }) });
+      e.status = r.ok ? 'قَبِل المزوّد طلب الإرسال' : 'فشل الإرسال'; e.accepted = r.ok;
     } else if (channel === 'telegram' && process.env.TELEGRAM_BOT_TOKEN) {
-      const r = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: to, text: subject + '\n' + text }) });
-      e.status = r.ok ? 'أُرسل' : 'فشل الإرسال';
-    } else if (channel === 'whatsapp' && process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID) {
-      const r = await fetch(`https://graph.facebook.com/v20.0/${process.env.WHATSAPP_PHONE_ID}/messages`, { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.WHATSAPP_TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'text', text: { body: subject + '\n' + text } }) });
-      e.status = r.ok ? 'أُرسل' : 'فشل الإرسال';
+      const r = await fetch(`https://api.telegram.org/bot${process.env.TELEGRAM_BOT_TOKEN}/sendMessage`, { method: 'POST', signal:AbortSignal.timeout(10000), headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ chat_id: to, text: subject + '\n' + text }) });
+      e.status = r.ok ? 'قَبِل المزوّد طلب الإرسال' : 'فشل الإرسال'; e.accepted = r.ok;
+    } else if (channel === 'whatsapp' && WA_READY) {
+      const r = await fetch(`https://graph.facebook.com/${process.env.WHATSAPP_API_VERSION}/${process.env.WHATSAPP_PHONE_ID}/messages`, { method: 'POST', signal:AbortSignal.timeout(10000), headers: { Authorization: 'Bearer ' + process.env.WHATSAPP_TOKEN, 'Content-Type': 'application/json' }, body: JSON.stringify({ messaging_product: 'whatsapp', to, type: 'template', template: { name: process.env.WHATSAPP_TEMPLATE, language: { code: process.env.WHATSAPP_TEMPLATE_LANG || 'ar' }, components: [{type:'body',parameters:[{type:'text',text:subject},{type:'text',text:BASE+'/#/inbox'}]}] } }) });
+      e.status = r.ok ? 'قَبِل المزوّد طلب الإرسال' : 'فشل الإرسال'; e.accepted = r.ok;
     }
   } catch { e.status = 'فشل الإرسال'; }
-  db.outbox.unshift(e); db.outbox = db.outbox.slice(0, 200); save(); return e;
+  const logged=DEV_OUTBOX?e:{id:e.id,t:e.t,channel:e.channel,status:e.status,accepted:!!e.accepted}; db.outbox.unshift(logged); db.outbox=db.outbox.slice(0,200); save(); return e;
 }
 function notify(u, kind, text) {
   const n = u.notify || {}; if (kind === 'new' && n.onMessage === false) return; if (kind === 'follow' && n.onFollowup === false) return;
@@ -125,6 +128,7 @@ async function api(req, res, url) {
   let r;
   const b = (m === 'POST' || m === 'PUT' || m === 'PATCH') ? await body(req) : {};
   if(p.startsWith('/api/stories')) return stories.handle(req,res,p,m,b);
+  if (p === '/api/capabilities' && m === 'GET') return send(res,200,{emailRecovery:EMAIL_READY,channels:{email:EMAIL_READY,whatsapp:WA_READY,telegram:!!process.env.TELEGRAM_BOT_TOKEN}});
   if (p === '/api/config') return send(res, 200, { name: db.settings.siteName || SITE_NAME });
   if (p.startsWith('/api/admin/')) return admin.handle(req, res, p, m, b);
   if (p === '/api/signup' && m === 'POST') {
@@ -178,18 +182,19 @@ async function api(req, res, url) {
     u.ogimg = img; save(); return send(res, 200, { ok: 1 });
   }
   if (p === '/api/forgot' && m === 'POST') {
+    if (!EMAIL_READY && !DEV_OUTBOX) return send(res,503,{error:'استرجاع كلمة السر بالإيميل مش متاح حالياً. حاول لاحقاً، ومتبعتش كلمة سرك لأي حد.'});
     const id = clean(b.id, 100).toLowerCase();
     if (limited('fg' + ip(req), 5, 3600e3)) return send(res, 429, { error: 'محاولات كتير، جرب بعد شوية' });
     const x = db.users[id] || Object.values(db.users).find(q => q.email && q.email === id);
-    if (x && x.email) { const tok = rid(24); db.resets[crypto.createHash('sha256').update(tok).digest('hex')] = { u: x.username, exp: Date.now() + 3600e3 };
+    if (x && x.email) { for(const [k,v] of Object.entries(db.resets))if(v.u===x.username)delete db.resets[k]; const tok = rid(24); db.resets[crypto.createHash('sha256').update(tok).digest('hex')] = { u: x.username, exp: Date.now() + 3600e3 };
       deliver('email', x.email, 'استرجاع كلمة السر في همسه', 'ادخل على اللينك ده لتغيير كلمة السر (صالح لمدة ساعة):\n' + BASE + '/#/reset/' + tok + '\nلو مش أنت اللي طلبت، تجاهل الرسالة.'); }
     return send(res, 200, { ok: 1 }); // same answer whether or not the account exists
   }
   if (p === '/api/reset' && m === 'POST') {
     const k = crypto.createHash('sha256').update(String(b.token || '')).digest('hex'), r0 = db.resets[k];
     if (!r0 || r0.exp < Date.now()) return send(res, 400, { error: 'اللينك منتهي أو غير صحيح' });
-    if (String(b.password || '').length < 6) return send(res, 400, { error: 'كلمة السر لازم تكون ٦ حروف على الأقل' });
-    const x = db.users[r0.u]; x.salt = rid(16); x.pw = hash(b.password, x.salt); delete db.resets[k];
+    if (String(b.password || '').length < 6 || String(b.password || '').length > 200) return send(res, 400, { error: 'كلمة السر لازم تكون ٦ حروف على الأقل' });
+    const x = db.users[r0.u]; if(!x)return send(res,400,{error:'اللينك منتهي أو غير صحيح'}); x.salt = rid(16); x.pw = hash(b.password, x.salt); delete db.resets[k];
     for (const [sid, ss] of Object.entries(db.sessions)) if (ss.u === x.username) delete db.sessions[sid];
     save(); return send(res, 200, { ok: 1 });
   }
@@ -208,12 +213,12 @@ async function api(req, res, url) {
       u.email = em; u.notify = { email: !!b.nEmail && !!em, telegram: clean(b.telegram, 40).replace(/[^0-9-]/g, ''), whatsapp: clean(b.whatsapp, 20).replace(/[^0-9]/g, ''), onMessage: b.onMessage !== false, onFollowup: b.onFollowup !== false };
       save();
     }
-    return send(res, 200, { ...(u.notify || {}), email: u.email || '', nEmail: !!(u.notify || {}).email, live: { email: !!(process.env.RESEND_API_KEY && process.env.MAIL_FROM), telegram: !!process.env.TELEGRAM_BOT_TOKEN, whatsapp: !!(process.env.WHATSAPP_TOKEN && process.env.WHATSAPP_PHONE_ID) } });
+    return send(res, 200, { ...(u.notify || {}), email: u.email || '', nEmail: !!(u.notify || {}).email, live: { email: EMAIL_READY, telegram: !!process.env.TELEGRAM_BOT_TOKEN, whatsapp: WA_READY } });
   }
   if (p === '/api/notify/test' && m === 'POST') {
     if (!u) return send(res, 401, { error: 'auth' });
-    const before = db.outbox.length; notify(u, 'new', 'ده إشعار تجريبي من همسه.'); await new Promise(r => setTimeout(r, 300));
-    return send(res, 200, { sent: db.outbox.length - before });
+    if(limited('ntest:'+u.username,3,3600e3))return send(res,429,{error:'استنى شوية قبل اختبار جديد'});
+    const jobs=[]; const n=u.notify||{}; if(n.email&&u.email&&EMAIL_READY)jobs.push(deliver('email',u.email,'اختبار إشعارات همسه',BASE+'/#/inbox')); if(n.whatsapp&&WA_READY)jobs.push(deliver('whatsapp',n.whatsapp,'اختبار إشعارات همسه',BASE+'/#/inbox')); if(n.telegram&&process.env.TELEGRAM_BOT_TOKEN)jobs.push(deliver('telegram',n.telegram,'اختبار إشعارات همسه',BASE+'/#/inbox')); const results=await Promise.all(jobs); return send(res,200,{attempted:results.length,accepted:results.filter(x=>x.accepted).length});
   }
   if (p === '/api/dev/outbox') return DEV_OUTBOX ? send(res, 200, { outbox: db.outbox }) : send(res, 404, { error: 'off' });
   if (p === '/api/profile' && m === 'POST') {
@@ -283,10 +288,12 @@ const { ogSvg } = require('./ogcard');
 let sharp = null; try { sharp = require('sharp'); } catch { /* optional dep: og image falls back to stored/static */ }
 const ogCache = new Map(); // handle -> {t, buf} (60s)
 // SEO / AI-SEO: index.html is a template; these routes serve crawlers and chat agents.
-function renderIndex() {
+function renderIndex(key='home') {
   const SNAME = db.settings.siteName || SITE_NAME;
   const ld = JSON.stringify({ '@context': 'https://schema.org', '@type': 'WebApplication', name: SNAME, alternateName: 'Hamsa', url: BASE + '/', description: 'منصة عربية للرسائل المجهولة: شارك رابطك واستقبل رسائل بدون أسماء ورد عليها في محادثة حديثة.', inLanguage: 'ar', applicationCategory: 'SocialNetworkingApplication', operatingSystem: 'Web', browserRequirements: 'Requires JavaScript', offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }, featureList: 'anonymous messages, chat-style replies, sender follow-up code, share conversation as image' }).replace(/</g, '\\u003c');
-  const html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8').split('__SITENAME__').join(escHtml(SNAME)).split('__BASE__').join(escHtml(BASE)).split('__LD__').join(ld);
+  let html = fs.readFileSync(path.join(PUB, 'index.html'), 'utf8').split('__SITENAME__').join(escHtml(SNAME)).split('__BASE__').join(escHtml(BASE)).split('__LD__').join(ld);
+  html=html.replace('<div id="app"></div>',`<div id="app">${publicPages.content(key,SNAME)}</div>`);
+  if(key!=='home'){html=html.replace(/<meta name="description"[^>]*>/,`<meta name="description" content="${escHtml(publicPages.pages[key].intro)}">`).replace(/<meta property="og:(title|description|url)"[^>]*>/g,'').replace(/<meta name="twitter:(title|description)"[^>]*>/g,'').replace(/<title>.*?<\/title>/,`<title>${escHtml(publicPages.pages[key].title)} | ${escHtml(SNAME)}</title>`).replace(/<link rel="canonical"[^>]*>/,`<link rel="canonical" href="${escHtml(BASE+'/'+key)}">`).replace('<script src="/app.js"></script>','');}
   const hash = crypto.createHash('sha256').update(ld).digest('base64');
   return { html, csp: SEC['Content-Security-Policy'].replace("script-src 'self'", `script-src 'self' 'sha256-${hash}'`) };
 }
@@ -322,9 +329,10 @@ const server = http.createServer(async (req, res) => {
     }
     if (req.method !== 'GET' && req.method !== 'HEAD') { res.writeHead(405, SEC); return res.end(); }
     if (url.pathname === '/robots.txt') { res.writeHead(200, { 'Content-Type': types['.txt'], 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : `User-agent: *\nAllow: /\nDisallow: /api/\n\nSitemap: ${BASE}/sitemap.xml\n`); }
-    if (url.pathname === '/sitemap.xml') { res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${BASE}/</loc><changefreq>weekly</changefreq><priority>1.0</priority></url></urlset>`); }
+    if (url.pathname === '/sitemap.xml') { res.writeHead(200, { 'Content-Type': 'application/xml; charset=utf-8', 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${['',...Object.keys(publicPages.pages)].map(k=>`<url><loc>${BASE}/${k}</loc><changefreq>monthly</changefreq></url>`).join('')}</urlset>`); }
     if (url.pathname === '/llms.txt') { res.writeHead(200, { 'Content-Type': types['.txt'], 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : llms()); }
     if (url.pathname === '/manifest.webmanifest') { res.writeHead(200, { 'Content-Type': 'application/manifest+json', 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : manifest()); }
+    if(Object.hasOwn(publicPages.pages,url.pathname.slice(1))){const {html,csp}=renderIndex(url.pathname.slice(1));res.writeHead(200,{'Content-Type':types['.html'],'Cache-Control':'no-cache',...SEC,'Content-Security-Policy':csp});return res.end(req.method==='HEAD'?undefined:html)}
     let rm;
     if ((rm = url.pathname.match(/^\/u\/([a-z0-9_]{3,20})$/))) { res.writeHead(200, { 'Content-Type': types['.html'], 'Cache-Control': 'no-cache', ...SEC }); return res.end(req.method === 'HEAD' ? undefined : profilePage(rm[1])); }
     if ((rm = url.pathname.match(/^\/og\/u\/([a-z0-9_]{3,20})$/))) {

@@ -278,3 +278,8 @@ textarea{resize:none}
 @keyframes theme-in{from{opacity:.2;transform:rotate(-35deg) scale(.7)}to{opacity:1;transform:rotate(0) scale(1)}}
 .confirmdialog{max-width:340px;width:calc(100% - 36px);border:1px solid var(--line);border-radius:22px;padding:24px;background:var(--card);color:var(--ink);direction:rtl;box-shadow:0 20px 80px #0005}.confirmdialog::backdrop{background:#0009}.confirmdialog h2{font-size:20px;margin:0 0 12px}.confirmdialog p{line-height:1.7;margin-bottom:20px}
 @media(prefers-reduced-motion:reduce){.theme,.theme svg{transition:none;animation:none}}
+
+.trustlinks{display:flex;flex-wrap:wrap;gap:10px 20px;justify-content:center;margin:20px 0}.trustlinks a{color:var(--p);text-decoration:underline;text-underline-offset:4px}.publicintro,.publicdoc{max-width:760px;margin:auto;padding:28px 20px 60px}.publicdoc h1{margin:24px 0 12px;font-size:30px}.publicdoc section{background:var(--card);border:1px solid var(--line);border-radius:18px;padding:20px;margin:16px 0}.publicdoc h2,.publicintro h2{font-size:21px;margin:0 0 12px}.publicdoc p{line-height:1.95;overflow-wrap:anywhere}.publicintro h2{margin-top:28px}button:disabled{opacity:.5;cursor:not-allowed}.notice{background:var(--notice)}
+
+.publicdoc>a:last-child{color:var(--p);display:inline-block;padding:12px 0}.publicdoc>.brand{display:block;margin-bottom:14px}
+@media(max-width:360px){.phone{width:min(280px,100%)}.lnav .row{gap:5px}.lnav .btn.sm{padding:6px 9px}.hcopy h1{font-size:30px}}
