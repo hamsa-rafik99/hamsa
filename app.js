@@ -191,13 +191,16 @@ async function pageAuth(signupFirst) {
   <div class="auth-field"><label for="un" id="username-label">اسم المستخدم أو الإيميل</label><input id="un" name="username" type="text" dir="ltr" autocomplete="username" autocapitalize="none" spellcheck="false" required maxlength="100" aria-describedby="username-help"><p class="auth-help" id="username-help">ادخل باسم المستخدم أو الإيميل المرتبط بحسابك.</p></div>
   <div class="auth-field" id="display-name-field" hidden><label for="nm">الاسم الظاهر <span class="mut">(اختياري)</span></label><input id="nm" name="displayName" type="text" dir="auto" autocomplete="nickname" maxlength="40" disabled placeholder="مثال: رفيق"><p class="auth-help">ده الاسم اللي الناس هتشوفه على صفحتك، مش عنوان إيميل.</p></div>
   <div class="auth-field" id="email-field" hidden><label for="em">البريد الإلكتروني <span class="mut">(اختياري)</span></label><input id="em" name="email" type="email" dir="ltr" autocomplete="email" inputmode="email" autocapitalize="none" spellcheck="false" maxlength="100" disabled placeholder="you@example.com"><p class="auth-help">لاسترجاع كلمة السر. مش بيظهر على صفحتك.</p></div>
-  <div class="auth-field"><label for="pw">كلمة السر</label><input id="pw" name="password" type="password" dir="ltr" autocomplete="current-password" required maxlength="200" aria-describedby="password-help"><p class="auth-help" id="password-help" hidden>من ٦ لـ ٢٠٠ حرف. استخدم كلمة سر مختلفة عن إيميلك.</p></div>
+  <div class="auth-field"><label for="pw">كلمة السر</label><input id="pw" name="password" type="password" dir="ltr" autocomplete="current-password" required maxlength="200" aria-describedby="password-help"><p class="auth-help" id="password-help" hidden>٨ خانات على الأقل. يفضل تجمع حروف وأرقام وتستخدم كلمة سر طويلة.</p></div>
   <p class="mut">باستخدامك الخدمة، اقرأ <a href="/terms">قواعد الاستخدام</a> و<a href="/privacy">سياسة الخصوصية</a>.</p><p class="err" id="er" role="alert"></p><button class="btn full" id="go">دخول</button><p style="margin:12px 0 0"><a href="#/forgot" id="fg" class="mut">نسيت كلمة السر؟</a></p></form></div>
   <div class="card center"><p class="sub" style="margin:0">معاك كود رسالة بعتها قبل كده؟</p><a class="btn ghost sm" href="#/follow" style="margin-top:8px">تابع الردود</a></div><p class="center" style="margin:8px 0 0"><a class="mut" href="#/">→ الصفحة الرئيسية</a></p>`);
+  passwordVisibility($('#pw'));
+  const suggestion=passwordSuggestion($('#pw'),$('#password-help'));
   let signup = false;
   const set = isSignup => {
-    if (signup !== isSignup) { $('#un').value=''; $('#pw').value=''; $('#er').textContent=''; }
+    if (signup !== isSignup) { $('#un').value=''; $('#pw').value=''; $('#pw')._hidePassword(); $('#er').textContent=''; }
     signup = isSignup;
+    if(isSignup)suggestion.show();else suggestion.hide();
     $('#display-name-field').hidden = $('#email-field').hidden = !isSignup;
     $('#nm').disabled = $('#em').disabled = !isSignup;
     $('#fg').hidden = isSignup;
@@ -208,13 +211,14 @@ async function pageAuth(signupFirst) {
     if (isSignup) $('#un').pattern='[A-Za-z0-9_]{3,20}'; else $('#un').removeAttribute('pattern');
     $('#username-help').textContent = isSignup ? 'ده معرّفك في رابط صفحتك، مش إيميل. من ٣ لـ ٢٠ حرف إنجليزي أو رقم أو _، من غير مسافات.' : 'ادخل باسم المستخدم أو الإيميل المرتبط بحسابك.';
     $('#pw').autocomplete = isSignup ? 'new-password' : 'current-password';
-    $('#pw').minLength = isSignup ? 6 : 1;
+    $('#pw').minLength = isSignup ? 8 : 1;
     $('#password-help').hidden = !isSignup;
     $('#go').textContent = isSignup ? 'إنشاء حساب' : 'دخول';
     $('#tl').classList.toggle('ghost', isSignup); $('#ts').classList.toggle('ghost', !isSignup);
     $('#tl').setAttribute('aria-pressed', String(!isSignup)); $('#ts').setAttribute('aria-pressed', String(isSignup));
   };
   $('#tl').onclick = () => set(false); $('#ts').onclick = () => set(true); set(!!signupFirst);
+  $('#pw').addEventListener('input',()=>{if(signup)passwordAdvice($('#pw'),$('#password-help'));});
   $('#f').onsubmit = async e => { e.preventDefault(); try { await api(signup ? '/signup' : '/login', 'POST', { username: $('#un').value, name: $('#nm').value, email: $('#em').value, password: $('#pw').value, ref: sessionStorage.getItem('ref') || '' }); location.hash = '#/inbox'; } catch (x) { $('#er').textContent = x.message; } };
 }
 async function pageSend(un) {
@@ -305,7 +309,7 @@ async function pageSettings() {
   <label class="row" style="margin-bottom:12px"><input type="checkbox" id="o2" ${n.onFollowup !== false ? 'checked' : ''} style="width:auto;margin:0"> أنبهني لما المرسل يكتب رد</label>
   <p class="err" id="ner"></p><div class="row"><button class="btn">حفظ الإشعارات</button><button type="button" class="btn ghost" id="tst">إشعار تجريبي</button></div></form><p class="mut" id="nok" style="margin:8px 0 0"></p>
   <p style="margin:12px 0 0"><a class="mut" href="#/outbox">شوف الرسايل اللي اتجهزت (للتجربة المحلية)</a></p></div>
-  <div class="card"><h1 style="font-size:20px">تغيير كلمة السر</h1><form id="pf"><input id="po" type="password" dir="ltr" placeholder="كلمة السر الحالية"><input id="pn" type="password" dir="ltr" placeholder="كلمة السر الجديدة"><p class="err" id="per"></p><button class="btn full ghost">تغيير</button></form></div><a href="#/inbox" class="mut">→ رجوع</a>`, userMenu(u));
+  <div class="card"><h1 style="font-size:20px">تغيير كلمة السر</h1><form id="pf"><input id="po" type="password" dir="ltr" placeholder="كلمة السر الحالية"><input id="pn" type="password" dir="ltr" placeholder="كلمة السر الجديدة (٨ خانات على الأقل)" minlength="8" maxlength="200"><p class="auth-help" id="change-password-help" role="status">٨ خانات على الأقل. يفضل حروف وأرقام.</p><p class="err" id="per"></p><button class="btn full ghost">تغيير</button></form></div><a href="#/inbox" class="mut">→ رجوع</a>`, userMenu(u));
   api('/missions').then(d => { $('#msc').textContent = nf(d.points) + ' نقطة'; }).catch(() => { $('#msc').textContent = ''; });
   const pend = {};
   const shrink = (file, w, h) => new Promise(ok => { const im = new Image(); im.onload = () => { const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d'), r = Math.max(w / im.width, h / im.height); g.drawImage(im, (w - im.width * r) / 2, (h - im.height * r) / 2, im.width * r, im.height * r); ok(c.toDataURL('image/jpeg', .82)); }; im.src = URL.createObjectURL(file); });
@@ -329,7 +333,10 @@ async function pageSettings() {
     app.querySelector('.wrap .card').insertAdjacentHTML('afterend', `<div class="card center invite"><h1 style="font-size:20px">ادعُ أصحابك</h1><p class="sub">شارك لينكك الخاص. كل واحد يسجل منه بيتسجل إنه جه من عندك (${iv.count} لحد دلوقتي).</p><div class="invlink" dir="ltr">${esc(link)}</div><button class="copybtn" data-act="copy" data-text="${esc(link)}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>نسخ اللينك</span></button>${navigator.share ? `<button class="btn full" data-act="share" data-text="${esc(link)}" style="margin-top:10px">مشاركة اللينك</button>` : ''}</div>`); } catch {}
   $('#nf').onsubmit = async e => { e.preventDefault(); try { await saveN(); $('#nok').textContent = 'اتحفظت ✓'; $('#ner').textContent = ''; } catch (x) { $('#ner').textContent = x.message; } };
   $('#tst').onclick = async () => { try { await saveN(); const r = await api('/notify/test', 'POST'); $('#nok').textContent = r.attempted ? `المزوّد قبل ${r.accepted} من ${r.attempted} طلب. ده مش تأكيد وصول.` : 'مفيش قناة إرسال مفعّلة. ماتبعتش أي إشعار.'; } catch (x) { $('#ner').textContent = x.message; } };
-  $('#pf').onsubmit = async e => { e.preventDefault(); try { await api('/password', 'POST', { old: $('#po').value, password: $('#pn').value }); $('#per').style.color = '#1a8f4c'; $('#per').textContent = 'اتغيرت ✓'; $('#po').value = $('#pn').value = ''; } catch (x) { $('#per').style.color = ''; $('#per').textContent = x.message; } };
+  passwordVisibility($('#po'));passwordVisibility($('#pn'));
+  passwordSuggestion($('#pn'),$('#change-password-help'));
+  $('#pn').addEventListener('input',()=>passwordAdvice($('#pn'),$('#change-password-help')));
+  $('#pf').onsubmit = async e => { e.preventDefault(); try { await api('/password', 'POST', { old: $('#po').value, password: $('#pn').value }); $('#per').style.color = '#1a8f4c'; $('#per').textContent = 'اتغيرت ✓ واتقفلت الجلسات التانية وروابط الاسترجاع القديمة.'; $('#po').value = $('#pn').value = ''; } catch (x) { $('#per').style.color = ''; $('#per').textContent = x.message; } };
 }
 async function pageForgot() {
   const cap=await api('/capabilities');
@@ -337,8 +344,48 @@ async function pageForgot() {
   if(!cap.emailRecovery){$('.card').insertAdjacentHTML('beforeend','<p class="notice" role="status">استرجاع كلمة السر بالإيميل مش متاح حالياً. مش هنبعت رسالة قبل تفعيل الخدمة.</p>');$('#f').querySelector('button').disabled=true;$('#id').disabled=true;}
   $('#f').onsubmit = async e => { e.preventDefault(); try { await api('/forgot', 'POST', { id: $('#id').value }); $('.card').innerHTML = `<div class="avatar">@</div><h1>تم</h1><p class="sub">لو الحساب موجود وعليه إيميل، هنحاول نبعت لينك الاسترجاع (صالح ساعة). مش هنقول إذا كان الحساب موجود ولا لأ، لحمايتك.</p><a class="btn ghost" href="#/login">رجوع</a>`; } catch (x) { $('#er').textContent = x.message; } };
 }
+function passwordVisibility(input){
+ const wrap=document.createElement('div');wrap.className='password-input';input.before(wrap);wrap.append(input);
+ const button=document.createElement('button');button.type='button';button.className='password-eye';
+ const paint=()=>{const shown=input.type==='text';button.setAttribute('aria-label',shown?'إخفاء كلمة السر':'إظهار كلمة السر');button.setAttribute('aria-pressed',String(shown));button.title=button.getAttribute('aria-label');button.innerHTML='<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12Z"/><circle cx="12" cy="12" r="3"/>'+(shown?'<path d="m3 3 18 18"/>':'')+'</svg>';};
+ button.onclick=()=>{input.type=input.type==='password'?'text':'password';paint();};
+ input._hidePassword=()=>{input.type='password';paint();};paint();wrap.append(button);
+}
+// Generated only in the visitor's browser, never requested from the server or stored.
+function passwordSuggestion(input,anchor){
+ const box=document.createElement('div');box.className='password-suggestion';
+ const generate=document.createElement('button');generate.type='button';generate.className='btn ghost sm';generate.textContent='اقترح كلمة مرور قوية';
+ const row=document.createElement('div');row.className='password-suggestion-row';row.hidden=true;
+ const output=document.createElement('code');output.dir='ltr';
+ const copy=document.createElement('button');copy.type='button';copy.className='btn ghost sm';copy.textContent='نسخ';
+ const use=document.createElement('button');use.type='button';use.className='btn sm';use.textContent='استخدمها';
+ const status=document.createElement('p');status.className='auth-help';status.setAttribute('role','status');
+ let suggestion='';
+ generate.onclick=()=>{
+  if(!globalThis.crypto?.getRandomValues){status.textContent='اقتراح كلمة مرور مش متاح في المتصفح ده.';return;}
+  const chars='ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz23456789!@#$%';
+  const randomIndex=max=>{const limit=256-(256%max),b=new Uint8Array(1);do{crypto.getRandomValues(b)}while(b[0]>=limit);return b[0]%max;};
+  const length=8+randomIndex(9);
+  do{suggestion=Array.from({length},()=>chars[randomIndex(chars.length)]).join('');}while(!/[A-Za-z]/.test(suggestion)||!/[0-9]/.test(suggestion)||!/[!@#$%]/.test(suggestion));
+  output.textContent=suggestion;row.hidden=false;status.textContent='اتولدت على جهازك بس. احفظها في مدير كلمات المرور ومتشاركهاش.';copy.textContent='نسخ';
+ };
+ copy.onclick=async()=>{try{await navigator.clipboard.writeText(suggestion);copy.textContent='اتنسخت ✓';}catch{status.textContent='النسخ مش متاح. حدد كلمة المرور وانسخها يدويًا.';}};
+ use.onclick=()=>{input.value=suggestion;input.dispatchEvent(new Event('input',{bubbles:true}));status.textContent='اتحطت في الخانة. احفظها قبل إنشاء الحساب أو تغيير كلمة السر.';};
+ row.append(output,copy,use);box.append(generate,row,status);anchor.after(box);
+ return {hide:()=>{suggestion='';output.textContent='';row.hidden=true;status.textContent='';box.hidden=true;},show:()=>box.hidden=false};
+}
+function passwordAdvice(input,help){
+ const value=input.value;
+ const numericOnly=/^\p{N}+$/u.test(value);
+ const mixed=/\p{L}/u.test(value)&&/\p{N}/u.test(value);
+ help.textContent=numericOnly?'الأرقام لوحدها سهلة التخمين. يفضل تضيف حروف وتختار كلمة سر قوية عشان يصعب تخمينها.':value&&!mixed?'يفضل تجمع حروف وأرقام في كلمة سر طويلة ومختلفة عن إيميلك.':'٨ خانات على الأقل. يفضل كلمة سر طويلة فيها حروف وأرقام.';
+ help.classList.toggle('password-warning',!!value&&!mixed);
+}
 function pageReset(tok) {
-  app.innerHTML = shell(`<div class="card center"><div class="avatar">*</div><h1>كلمة سر جديدة</h1><form id="f"><input id="pw" type="password" dir="ltr" placeholder="كلمة السر الجديدة" autocomplete="new-password"><p class="err" id="er"></p><button class="btn full">حفظ ودخول</button></form></div>`);
+  app.innerHTML = shell(`<div class="card center"><div class="avatar">*</div><h1>كلمة سر جديدة</h1><form id="f"><input id="pw" type="password" dir="ltr" placeholder="كلمة السر الجديدة (٨ خانات على الأقل)" minlength="8" maxlength="200" autocomplete="new-password" aria-describedby="reset-password-help"><p class="auth-help" id="reset-password-help" role="status">٨ خانات على الأقل. يفضل حروف وأرقام.</p><p class="err" id="er"></p><button class="btn full">حفظ ودخول</button></form></div>`);
+  passwordVisibility($('#pw'));
+  passwordSuggestion($('#pw'),$('#reset-password-help'));
+  $('#pw').addEventListener('input',()=>passwordAdvice($('#pw'),$('#reset-password-help')));
   $('#f').onsubmit = async e => { e.preventDefault(); try { await api('/reset', 'POST', { token: tok, password: $('#pw').value }); $('.card').innerHTML = `<div class="avatar">✓</div><h1>اتغيرت كلمة السر</h1><p class="sub">تقدر تدخل بيها دلوقتي.</p><a class="btn" href="#/login">دخول</a>`; } catch (x) { $('#er').textContent = x.message; } };
 }
 async function pageOutbox() {
@@ -407,4 +454,4 @@ async function pageStoryCompose(){
  const setmode=m=>{mode=m;$('#stextbox').hidden=m!=='text';$('#simagebox').hidden=m!=='image';$('#stext').classList.toggle('ghost',m!=='text');$('#simage').classList.toggle('ghost',m!=='image');update()};$('#stext').onclick=()=>setmode('text');$('#simage').onclick=()=>setmode('image');
  $('#storyfile').onchange=async()=>{const f=$('#storyfile').files[0];if(!f)return;try{if(f.size>5e6||!['image/jpeg','image/png','image/webp'].includes(f.type))throw Error('اختار صورة JPG أو PNG أو WebP أقل من ٥ ميجا');let bitmap;for(let attempt=0;attempt<3;attempt++){try{bitmap=await createImageBitmap(f);break}catch(e){if(attempt===2)throw Error('تعذر قراءة الصورة، جرب صورة تانية');await new Promise(r=>setTimeout(r,300))}}const scale=Math.min(1,1080/Math.max(bitmap.width,bitmap.height)),c=document.createElement('canvas');c.width=Math.round(bitmap.width*scale);c.height=Math.round(bitmap.height*scale);c.getContext('2d').drawImage(bitmap,0,0,c.width,c.height);bitmap.close();let q=.8,data;do{data=c.toDataURL('image/webp',q);q-=.1}while(data.length>330000&&q>.25);if(data.length>330000)throw Error('الصورة كبيرة، جرب صورة أصغر');image=data;update();$('#serror').textContent=''}catch(e){$('#serror').textContent=e.message}};
  $('#spublish').onclick=async()=>{const b=$('#spublish');b.disabled=true;try{await api('/stories','POST',mode==='image'?{image}:{text:$('#storytext').value,color});location.hash='#/inbox'}catch(e){$('#serror').textContent=e.message;b.disabled=false}};
-}
+  }
