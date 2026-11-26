@@ -1,5 +1,6 @@
 // همسه: anonymous messages with reply threads. No dependencies. Node 18+.
 const http = require('http'), fs = require('fs'), path = require('path'), crypto = require('crypto');
+const ICONS = require('./icons-data');
 const PORT = process.env.PORT || 3000;
 const DB_FILE = process.env.DB_FILE || path.join(__dirname, 'data.json');
 const PUB = fs.existsSync(path.join(__dirname, 'public')) ? path.join(__dirname, 'public') : __dirname;
@@ -383,7 +384,7 @@ const server = http.createServer(async (req, res) => {
     }
     const f = ['/app.js', '/style.css', '/admin-ui.js', '/favicon.svg', '/favicon.ico', '/og.png', '/icon-180.png', '/icon-192.png', '/icon-512.png'].includes(url.pathname) ? (url.pathname === '/favicon.ico' ? '/favicon.svg' : url.pathname) : '/index.html'; // fixed whitelist: no path traversal possible
     if (f === '/index.html') { const { html, csp } = renderIndex(); res.writeHead(200, { 'Content-Type': types['.html'], 'Cache-Control': 'no-cache', ...SEC, 'Content-Security-Policy': csp }); return res.end(req.method === 'HEAD' ? undefined : html); }
-    const data = fs.readFileSync(path.join(PUB, f));
+    const data = ICONS[f] ? Buffer.from(ICONS[f], 'base64') : fs.readFileSync(path.join(PUB, f));
     res.writeHead(200, { 'Content-Type': types[path.extname(f)], 'Cache-Control': 'no-cache', ...SEC }); res.end(req.method === 'HEAD' ? undefined : data);
   } catch (e) {
     metrics.errors++;
