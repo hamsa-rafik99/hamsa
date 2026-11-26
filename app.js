@@ -54,9 +54,14 @@ const brandline = () => `<div class="brandline">من <b>${esc(SITE)}</b> · رس
 const av = (u, cls = '') => u.avatar ? `<img class="av ${cls}" src="${u.avatar}" alt="${esc(u.name || '')}">` : `<div class="av ${cls}">${esc((u.name || '?')[0])}</div>`;
 const nf = n => Number(n).toLocaleString('ar-EG');
 const since = t => t ? new Date(t).toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' }) : '—';
-const profileHead = (u, owner) => `<div class="pcard"><div class="cover ${u.cover ? '' : 'nocover'}" ${u.cover ? `style="background-image:url(${u.cover});background-position:center ${u.covery ?? 50}%"` : ''}></div><div class="pbody">${av(u, 'big')}<h1>${esc(u.name)}</h1><div class="handle">@${esc(u.username)}</div>
-  ${u.bio ? `<p class="bio">${esc(u.bio)}</p>` : ''}
-  <div class="stats" style="grid-template-columns:repeat(${owner ? 4 : 3},1fr)"><div><b>${nf(u.stats.received)}</b><span>رسالة</span></div><div><b>${nf(u.stats.replies)}</b><span>رد</span></div>${owner ? `<div><b>${nf(u.views)}</b><span>زيارة</span></div>` : ''}<div><b>${since(u.since)}</b><span>انضم</span></div></div></div></div>`;
+const icCam = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 8h3l2-3h6l2 3h3v11H4z"/><circle cx="12" cy="13" r="3.5"/></svg>`, icEdit = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg>`, icLink = `<svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false"><path d="M10 14a4 4 0 0 0 6 0l3-3a4 4 0 0 0-6-6l-1 1"/><path d="M14 10a4 4 0 0 0-6 0l-3 3a4 4 0 0 0 6 6l1-1"/></svg>`;
+const noteBubble = (u, owner) => (u.note || owner) ? `<div class="pnote${u.note ? '' : ' empty'}" ${owner ? 'data-act="note" role="button" tabindex="0"' : ''}>${u.note ? esc(u.note) : 'شارك ملاحظة...'}</div>` : '';
+const profileHead = (u, owner) => { const link = `${location.origin}/u/${u.username}`; return `<div class="pcard pf"><div class="cover ${u.cover ? '' : 'nocover'}" ${u.cover ? `style="background-image:url(${u.cover});background-position:center ${u.covery ?? 50}%"` : ''}>${owner ? `<a class="pfcam" href="#/settings" aria-label="تغيير الغلاف">${icCam}<span>تغيير الغلاف</span></a>` : ''}</div><div class="pfbody"><div class="pfav">${noteBubble(u, owner)}${av(u, 'big')}${owner ? `<a class="pfcam2" href="#/settings" aria-label="تغيير الصورة الشخصية">${icCam}</a>` : ''}</div>
+  ${owner ? `<form class="pnoteform" id="noteform" hidden><input id="noteinp" maxlength="60" placeholder="اكتب ملاحظة قصيرة (٦٠ حرف)" value="${esc(u.note || '')}"><div class="row"><button class="btn sm" type="submit">حفظ</button><button class="btn sm ghost" type="button" data-act="noteclear">مسح</button></div><div class="mut" style="font-size:12px">الملاحظة بتظهر لزوار صفحتك ٢٤ ساعة.</div></form>` : ''}
+  <h1 class="pfname">${esc(u.name)}</h1><div class="handle">@${esc(u.username)}</div>
+  ${u.bio ? `<p class="bio pfbio">${esc(u.bio)}</p>` : ''}
+  <div class="pfact">${owner ? `<a class="btn" href="#/settings">${icEdit}<span>تعديل الملف</span></a><button class="btn ghost" data-act="copy" data-text="${esc(link)}">${icLink}<span>نسخ اللينك</span></button>` : `<button class="btn" data-act="goto">ابعت همسة مجهولة</button>`}</div>
+  <div class="stats" style="grid-template-columns:repeat(${owner ? 4 : 3},1fr)"><div><b>${nf(u.stats.received)}</b><span>رسالة</span></div><div><b>${nf(u.stats.replies)}</b><span>رد</span></div>${owner ? `<div><b>${nf(u.views)}</b><span>زيارة</span></div>` : ''}<div><b>${since(u.since)}</b><span>انضم</span></div></div></div></div>`; };
 const bigCopy = (text, label) => `<div class="invlink" dir="ltr">${esc(text)}</div><button class="copybtn" data-act="copy" data-text="${esc(text)}"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h9"/></svg><span>${label}</span></button>`;
 const copyBtn = (id, text) => `<button class="btn sm ghost" data-act="copy" data-text="${esc(text)}">نسخ</button>`;
 // auto-growing composer textarea
@@ -455,3 +460,18 @@ async function pageStoryCompose(){
  $('#storyfile').onchange=async()=>{const f=$('#storyfile').files[0];if(!f)return;try{if(f.size>5e6||!['image/jpeg','image/png','image/webp'].includes(f.type))throw Error('اختار صورة JPG أو PNG أو WebP أقل من ٥ ميجا');let bitmap;for(let attempt=0;attempt<3;attempt++){try{bitmap=await createImageBitmap(f);break}catch(e){if(attempt===2)throw Error('تعذر قراءة الصورة، جرب صورة تانية');await new Promise(r=>setTimeout(r,300))}}const scale=Math.min(1,1080/Math.max(bitmap.width,bitmap.height)),c=document.createElement('canvas');c.width=Math.round(bitmap.width*scale);c.height=Math.round(bitmap.height*scale);c.getContext('2d').drawImage(bitmap,0,0,c.width,c.height);bitmap.close();let q=.8,data;do{data=c.toDataURL('image/webp',q);q-=.1}while(data.length>330000&&q>.25);if(data.length>330000)throw Error('الصورة كبيرة، جرب صورة أصغر');image=data;update();$('#serror').textContent=''}catch(e){$('#serror').textContent=e.message}};
  $('#spublish').onclick=async()=>{const b=$('#spublish');b.disabled=true;try{await api('/stories','POST',mode==='image'?{image}:{text:$('#storytext').value,color});location.hash='#/inbox'}catch(e){$('#serror').textContent=e.message;b.disabled=false}};
                                                                                                                                                                           }
+
+document.addEventListener('click', async e => {
+  const b = e.target.closest('[data-act=note],[data-act=noteclear],[data-act=goto]'); if (!b) return;
+  const act = b.dataset.act;
+  if (act === 'goto') { const m = document.querySelector('.msgcard'); if (m) { m.scrollIntoView({ behavior: 'smooth', block: 'center' }); const t = m.querySelector('textarea'); if (t) t.focus({ preventScroll: true }); } return; }
+  const f = document.querySelector('#noteform'); if (!f) return;
+  if (act === 'note') { f.hidden = !f.hidden; if (!f.hidden) document.querySelector('#noteinp').focus(); return; }
+  if (act === 'noteclear') { try { await api('/note', 'POST', { note: '' }); } catch (x) { return; } document.querySelector('#noteinp').value = ''; setNote(''); f.hidden = true; }
+});
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'noteform') return; e.preventDefault();
+  const v = document.querySelector('#noteinp').value.trim().slice(0, 60);
+  try { const r = await api('/note', 'POST', { note: v }); setNote(r.note); e.target.hidden = true; } catch (x) {}
+});
+function setNote(t) { const n = document.querySelector('.pnote'); if (!n) return; n.textContent = t || 'شارك ملاحظة...'; n.classList.toggle('empty', !t); }
