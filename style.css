@@ -318,3 +318,30 @@ textarea{resize:none}
 .pfact .btn.ghost{flex:0 0 auto;padding:11px 16px;background:var(--soft);color:var(--ink)}
 .pf .stats{margin-top:16px}
 .pf .stats div{text-align:center;min-width:0;padding:10px 4px}.pf .stats b{font-size:16px;white-space:nowrap}.pf .stats span{display:block}
+
+/* v26 profile: name beside photo, compact stats, shortcut row */
+.pfrow{display:flex;align-items:flex-start;gap:14px}
+.pfrow .pfav{flex:0 0 112px}
+.pfid{min-width:0;padding-top:12px;text-align:start}
+.pfid .pfname{margin:0;font-size:22px;line-height:1.25;overflow-wrap:anywhere}
+.pfid .handle{margin-top:4px}
+.pf .stats{margin-top:12px;padding:2px 4px;border-radius:14px}
+.pf .stats div{padding:5px 4px}.pf .stats b{font-size:15px;line-height:1.3}.pf .stats span{font-size:10.5px;line-height:1.2}
+.pfnav{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}
+.pfn{display:flex;flex-direction:column;align-items:center;gap:4px;padding:9px 4px;border-radius:14px;background:var(--soft);color:var(--ink);text-decoration:none;font-size:12px;font-weight:600}
+.pfn svg{width:22px;height:22px;color:var(--p)}
+.pf .stats div:last-child b{font-size:13px}
+
+.edit-cover{height:150px;border-radius:16px;padding:10px;align-items:flex-end;justify-content:flex-start}
+.edit-cover .cvbar{width:100%;justify-content:space-between;flex-direction:row}
+.edit-cover .cvbar .btn{background:rgba(0,0,0,.55);color:#fff;border:0;backdrop-filter:blur(6px);padding:7px 12px;font-size:12.5px}
+.edav{display:flex;align-items:flex-end;gap:12px;margin:-42px 14px 14px;position:relative}
+.edavimg{border-radius:50%;padding:4px;background:var(--card,#fff);line-height:0;flex:none}
+.edbtns{display:flex;gap:8px;flex-wrap:wrap;padding-bottom:4px}
+.edbtns .btn{display:inline-flex;align-items:center;gap:5px;padding:7px 12px;font-size:12.5px}
+.edbtns svg{width:15px;height:15px}
+
+.edit-cover{align-items:flex-start}
+.edavimg .av.big{margin:0;border:4px solid var(--card)}
+.edavimg{padding:0;background:none}
+.edav{align-items:flex-start}.edbtns{margin-top:48px;flex-wrap:nowrap;gap:6px}.edbtns .btn{padding:7px 10px;font-size:12px;white-space:nowrap}
