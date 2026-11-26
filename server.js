@@ -93,7 +93,7 @@ function missionsFor(u) {
   return { points, missions };
 }
 
-const pub = u => ({ username: u.username, name: u.name, bio: u.bio, avatar: u.avatar || '', cover: u.cover || '', covery: u.covery ?? 50, since: u.created || 0, views: u.views || 0, stats: stats(u.username) });
+const pub = u => ({ username: u.username, name: u.name, bio: u.bio, avatar: u.avatar || '', cover: u.cover || '', covery: u.covery ?? 50, note: (u.note && Date.now() - (u.noteAt || 0) < 86400000) ? u.note : '', noteAt: u.noteAt || 0, since: u.created || 0, views: u.views || 0, stats: stats(u.username) });
 // Real client address behind Render/Cloudflare. Used ONLY for rate limits and the hidden block fingerprint, never stored in the clear.
 let stories;
 let admin; // created in boot() after the database is loaded
@@ -234,6 +234,11 @@ async function api(req, res, url) {
     const jobs=[]; const n=u.notify||{}; if(n.email&&u.email&&NOTIFY_EMAIL_READY)jobs.push(deliver('email',u.email,'اختبار إشعارات همسه',BASE+'/#/inbox')); if(n.whatsapp&&WA_READY)jobs.push(deliver('whatsapp',n.whatsapp,'اختبار إشعارات همسه',BASE+'/#/inbox')); if(n.telegram&&process.env.TELEGRAM_BOT_TOKEN)jobs.push(deliver('telegram',n.telegram,'اختبار إشعارات همسه',BASE+'/#/inbox')); const results=await Promise.all(jobs); return send(res,200,{attempted:results.length,accepted:results.filter(x=>x.accepted).length});
   }
   if (p === '/api/dev/outbox') return DEV_OUTBOX ? send(res, 200, { outbox: db.outbox }) : send(res, 404, { error: 'off' });
+  if (p === '/api/note' && m === 'POST') {
+    if (!u) return send(res, 401, { error: 'auth' });
+    u.note = clean(b.note, 60); u.noteAt = u.note ? Date.now() : 0; save();
+    return send(res, 200, { note: u.note, noteAt: u.noteAt });
+  }
   if (p === '/api/profile' && m === 'POST') {
     if (!u) return send(res, 401, { error: 'auth' });
     u.name = clean(b.name, 40) || u.username; u.bio = clean(b.bio, 200); u.open = b.open !== false;
