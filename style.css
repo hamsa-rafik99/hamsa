@@ -296,3 +296,25 @@ textarea{resize:none}
 /* v22: explicit send control sizing avoids native mobile button padding and SVG flex shrink. */
 .composer .send{appearance:none;-webkit-appearance:none;box-sizing:border-box;padding:0;margin:0;width:48px;min-width:48px;max-width:48px;height:48px;min-height:48px;flex:0 0 48px;display:flex;align-items:center;justify-content:center;line-height:1;border:0;border-radius:50%;color:#fff;overflow:visible}
 .composer .send svg{display:block;box-sizing:content-box;width:26px;min-width:26px;max-width:26px;height:26px;min-height:26px;flex:0 0 26px;padding:0;margin:0;overflow:visible;stroke:currentColor;stroke-width:2;transform:scaleX(-1);pointer-events:none}
+
+/* v23 facebook-style profile */
+.pf .cover{height:190px;overflow:visible}
+.pfcam{position:absolute;bottom:12px;inset-inline-end:12px;display:flex;gap:6px;align-items:center;background:rgba(20,16,14,.62);color:#fff;border-radius:20px;padding:8px 12px;font-size:13px;font-weight:600;text-decoration:none;-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+.pfbody{position:relative;z-index:1;padding:0 18px 18px;text-align:start}
+.pfav{position:relative;width:112px;height:112px;margin-top:-56px}
+.pf .pfav .av.big{width:112px;height:112px;margin:0;border:5px solid var(--card);font-size:44px}
+.pfcam2{position:absolute;bottom:2px;inset-inline-end:-2px;width:34px;height:34px;border-radius:50%;background:var(--soft);color:var(--ink);border:3px solid var(--card);display:flex;align-items:center;justify-content:center}
+.pnote{position:absolute;bottom:100%;inset-inline-start:22px;margin-bottom:22px;z-index:3;width:max-content;max-width:230px;background:#fff;color:#171210;border-radius:18px;padding:9px 14px;font-size:14px;font-weight:600;line-height:1.5;box-shadow:0 6px 18px rgba(0,0,0,.28);overflow-wrap:anywhere}
+.pnote.empty{font-weight:500;color:#6b5f58}
+.pnote[data-act]{cursor:pointer}
+.pnote::after{content:"";position:absolute;bottom:-10px;inset-inline-start:26px;width:14px;height:14px;background:#fff;border-radius:50%}
+.pnote::before{content:"";position:absolute;bottom:-20px;inset-inline-start:36px;width:7px;height:7px;background:#fff;border-radius:50%}
+.pnoteform{margin:12px 0 0}.pnoteform .row{gap:8px;margin:8px 0}
+.pf .pfname{margin:12px 0 0;font-size:24px;text-align:start}
+.pf .handle{margin-top:2px}
+.pf .pfbio{text-align:start;margin:10px 0 0}
+.pfact{display:flex;gap:10px;margin-top:14px}
+.pfact .btn{flex:1;display:flex;align-items:center;justify-content:center;gap:7px;text-decoration:none;padding:11px;border-radius:12px}
+.pfact .btn.ghost{flex:0 0 auto;padding:11px 16px;background:var(--soft);color:var(--ink)}
+.pf .stats{margin-top:16px}
+.pf .stats div{text-align:center;min-width:0;padding:10px 4px}.pf .stats b{font-size:16px;white-space:nowrap}.pf .stats span{display:block}
